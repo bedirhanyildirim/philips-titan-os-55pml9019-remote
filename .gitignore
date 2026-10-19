@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+build/
+dist/
+
+# macOS
+.DS_Store
+
+# Local TV credentials — NEVER commit (contains the paired auth_key)
+credentials.json
+pair_state.json
+.philips-tv-remote/
