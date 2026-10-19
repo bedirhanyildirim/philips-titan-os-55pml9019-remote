@@ -136,6 +136,44 @@ open dist/PhilipsTVMenubar.app
       control is possible at all (it pairs with the same PIN/JointSpace, so likely at
       parity with us; QR code is just to download the app). Use jadx/REA on the APK.
 
+## Ideas & explored concepts (keep for future chats)
+
+### Screen mirroring (Mac → TV)
+- The TV's **"Screen Mirroring" source is Miracast** ("pair your active screen /
+  mobile device — works on laptop" = Windows/Android senders). **macOS cannot
+  Miracast**, so no native Mac mirroring to this input.
+- ⚠️ Entering Screen-Mirroring mode makes the TV **drop off the LAN** → JointSpace
+  API unreachable until you exit it. (Explains sudden "can't reach TV" during testing.)
+- Options to actually get the Mac on the TV, ranked:
+  1. **Wired HDMI 3** (what the user did before) — zero lag, 100% reliable.
+  2. **AirPlay/Chromecast dongle** (Apple TV 4K / Chromecast w/ Google TV) — best
+     wireless; also solves Spotify + bypasses Titan ads.
+  3. **DLNA media push** — DMR is ON; push photo/music/video FILES (not live screen).
+     We can build this into the app.
+  4. **DLNA screen-mirror apps** (e.g. `mirrorcast-macos`, JustStream, AirParrot) —
+     capture the Mac screen and stream over DLNA; works but laggy.
+- App feature idea: a "Mirror / Cast" tab that (a) one-tap opens the TV's Screen-
+  Mirroring input via key nav, and/or (b) DLNA-pushes a chosen file.
+
+### Orange box (HDMI 1) control
+- Almost certainly an **Orange Polska TV decoder**; current models (4K, 4K Stream,
+  4K Multi, 4K Duo) run **Android TV** (e.g. 4K Duo = Android TV 14, Amlogic S905X5M).
+- Possible control paths IF it's an Android-TV model and on the LAN:
+  - **Wake-on-LAN** to power it on (enable on the box: Menu → Network → Wake on LAN).
+  - **Network remote** ("Orange Box Remote" — enable on the box: Network → TV Remote
+    App Settings).
+  - **ADB over TCP** (Android TV) for full control / app launch.
+- Needed to proceed: the box's exact **model + IP + MAC**, and enabling the above on
+  the box itself. Then integrate as a second device in the app (power via WoL, keys via
+  Android TV Remote v2 protocol or ADB).
+
+### "Show my own images instead of ads"
+- Redirecting ad DNS to our own server does NOT work: ads are HTTPS (can't forge
+  their cert / can't install a custom CA on Titan OS), the ad response must match
+  Equativ's exact API schema, and we can't drive the OS home-screen renderer.
+- Working alternative = **DLNA push** (show your photos/video as full-screen media),
+  or your own page in the TV browser, or an HDMI dongle's home screen.
+
 ## DNS ad-blocking (Titan Ads)
 
 Titan Ads = Equativ (ex-Smart AdServer) SSP + ThinkAnalytics. Can't remove in UI;
