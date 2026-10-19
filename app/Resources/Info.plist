@@ -11,9 +11,9 @@
     <key>CFBundleExecutable</key>
     <string>PhilipsTVMenubar</string>
     <key>CFBundleVersion</key>
-    <string>0.1.0</string>
+    <string>0.2.0</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.1.0</string>
+    <string>0.2.0</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>LSMinimumSystemVersion</key>
@@ -21,7 +21,12 @@
     <key>LSUIElement</key>
     <true/>
     <key>NSLocalNetworkUsageDescription</key>
-    <string>Philips TV, aynı ağdaki televizyonunuzu kontrol etmek için yerel ağa erişir.</string>
+    <string>Philips TV uses the local network to control your TV and TV box.</string>
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsLocalNetworking</key>
+        <true/>
+    </dict>
     <key>NSHighResolutionCapable</key>
     <true/>
 </dict>

@@ -16,11 +16,53 @@ final class AppState: ObservableObject {
     @Published var pairingAwaitingPIN: Bool = false
     private var pairingTimestamp: Int = 0
 
+    // Titan OS app control (MQTT :8883) — separate pairing from JointSpace
+    @Published var titan: TitanClient.Credentials? = TitanClient.loadSaved()
+    @Published var tvApps: [TitanApp] = AppState.defaultApps
+    @Published var titanAwaitingPIN = false
+    @Published var titanPIN = ""
+    private var titanPairing: TitanClient?
+
+    // UI
+    @Published var lastLaunched: TitanApp?
+    @Published var glow: Color = Theme.accent  // last Ambilight colour, for the TV preview
+    @Published var favorites: [String] =
+        UserDefaults.standard.stringArray(forKey: "favorites") ?? ["youtube", "netflix", "disney", "max"] {
+        didSet { UserDefaults.standard.set(favorites, forKey: "favorites") }
+    }
+
+    var favoriteApps: [TitanApp] { favorites.compactMap { c in tvApps.first { $0.code == c } } }
+
+    func toggleFavorite(_ app: TitanApp) {
+        if let i = favorites.firstIndex(of: app.code) { favorites.remove(at: i) }
+        else { favorites.append(app.code) }
+    }
+
+    /// Shown until the TV's own list loads (codes/urls from /v1/me/user_apps, PL market).
+    static let defaultApps: [TitanApp] = [
+        TitanApp(code: "youtube", name: "YouTube", url: "https://www.youtube.com/tv"),
+        TitanApp(code: "netflix", name: "Netflix", url: "localfunction:gotonetflix"),
+        TitanApp(code: "disney", name: "Disney+", url: "disneyplus"),
+        TitanApp(code: "max", name: "HBO Max", url: "https://titan.play.max.com"),
+        TitanApp(code: "prime_video", name: "Prime Video", url: "localfunction:gotoaiv"),
+    ]
+
     init() {
         let c = PhilipsClient.loadSaved()
         self.client = c
         self.needsPairing = (c == nil)
-        if c != nil { Task { await refresh() } }
+        Task { await startup() }
+    }
+
+    /// The first launch after a rebuild can briefly hit "Local network prohibited"
+    /// while macOS re-checks the permission — retry a few times before giving up.
+    private func startup() async {
+        for attempt in 0..<4 {
+            if attempt > 0 { try? await Task.sleep(nanoseconds: 3_000_000_000) }
+            if client != nil { await refresh() }
+            if statusMessage.isEmpty { break }
+        }
+        await loadApps()
     }
 
     func refresh() async {
@@ -32,7 +74,7 @@ final class AppState: ObservableObject {
             if let act = try? await c.currentActivity() { currentApp = act }
             statusMessage = ""
         } catch {
-            statusMessage = "Bağlanılamadı"
+            statusMessage = titan != nil ? "JointSpace not responding (remote works via MQTT)" : "Can't reach the TV"
             AppState.log("refresh ERROR: \(error)")
         }
     }
@@ -55,7 +97,193 @@ final class AppState: ObservableObject {
         guard let c = client else { return }
         Task {
             do { try await body(c) }
-            catch { statusMessage = "\(label) hata" }
+            catch { statusMessage = "\(label) failed" }
+        }
+    }
+
+    // MARK: remote keys / keyboard (Titan MQTT `rc`, JointSpace fallback)
+
+    private var titanRemote: TitanClient?
+    private var keyChain: Task<Void, Never>?
+
+    /// Send a remote key. Prefers Titan MQTT (keeps working even if JointSpace hangs),
+    /// falls back to JointSpace input/key for keys without a known keycode.
+    func key(_ k: String) {
+        if let creds = titan, let code = TitanClient.keyCodes[k] {
+            titanSend(creds, "rc", ["key_code": code], label: k)
+        } else {
+            run(k) { try await $0.sendKey(k) }
+        }
+    }
+
+    func type(_ text: String) {
+        if let creds = titan {
+            for ch in text { titanSend(creds, "keyboard", ["opcode": 0, "text": String(ch)], label: "keyboard") }
+        } else {
+            run("keyboard") { try await $0.textEntry(text) }
+        }
+    }
+
+    /// Serialised so key presses keep their order and share one connection.
+    /// `delay` (seconds) is waited after the publish, before the next queued one.
+    private func titanSend(_ creds: TitanClient.Credentials, _ topic: String, _ payload: [String: Any],
+                           label: String, delay: Double = 0) {
+        let prev = keyChain
+        let remote = titanRemote ?? TitanClient(host: creds.host)
+        titanRemote = remote
+        keyChain = Task {
+            await prev?.value
+            do {
+                try await remote.publish(creds, topic, payload)
+                if delay > 0 { try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000)) }
+            } catch {
+                AppState.log("titan \(topic) ERROR: \(error)")
+                statusMessage = "\(label) failed"
+            }
+        }
+    }
+
+    // MARK: Orange TV box (HDMI 1)
+
+    let orange = OrangeClient(host: UserDefaults.standard.string(forKey: "orangeHost") ?? OrangeClient.defaultHost)
+    @Published var orangeStatus: OrangeClient.Status?
+    @Published var orangeReachable = true
+
+    func refreshOrange() async {
+        do {
+            orangeStatus = try await orange.status()
+            orangeReachable = true
+        } catch {
+            orangeStatus = nil
+            orangeReachable = false
+        }
+    }
+
+    func orangeKey(_ code: Int) {
+        Task {
+            do {
+                try await orange.press(code)
+                try? await Task.sleep(nanoseconds: 700_000_000)
+                await refreshOrange()
+            } catch {
+                AppState.log("orange key \(code) ERROR: \(error)")
+                orangeReachable = false
+                statusMessage = "Can't reach the Orange box"
+            }
+        }
+    }
+
+    func orangeKey(_ key: OrangeClient.Key) { orangeKey(key.rawValue) }
+
+    /// Show the box on the TV (HDMI 1 via the Sources drawer).
+    func watchOrange() {
+        if let hdmi1 = TVSource.hdmi.first(where: { $0.id == "hdmi1" }) { select(hdmi1) }
+    }
+
+    // MARK: sources (HDMI etc.)
+
+    /// JointSpace /sources is 403 on Titan OS, so select an input through the Sources
+    /// drawer: open it, pin focus to an end of the list (it doesn't wrap, and focus
+    /// starts on the current source), step to the row, OK. Keys are paced so none get
+    /// dropped — a short count could leave focus on "Screen mirroring", which drops
+    /// the TV off the network.
+    @Published var currentSource: TVSource?
+
+    func select(_ source: TVSource) {
+        guard let creds = titan else {
+            statusMessage = "Source switching needs Titan pairing"
+            return
+        }
+        currentSource = source
+        let rc = { (k: String, d: Double) in
+            self.titanSend(creds, "rc", ["key_code": TitanClient.keyCodes[k]!], label: "Source", delay: d)
+        }
+        let arrows: [String]
+        switch source.path {
+        case .home:                              // home screen == Streaming
+            rc("Home", 0)
+            return
+        case .top(let down):
+            arrows = Array(repeating: "CursorUp", count: 12) + Array(repeating: "CursorDown", count: down)
+        case .bottom(let up):
+            arrows = Array(repeating: "CursorDown", count: 12) + Array(repeating: "CursorUp", count: up)
+        }
+        rc("Home", 2.0)                          // settle first: Source on an open drawer closes it
+        rc("Source", 2.0)
+        for (i, a) in arrows.enumerated() { rc(a, i == arrows.count - 1 ? 0.9 : 0.4) }
+        rc("Confirm", 0)
+    }
+
+    // MARK: apps (Titan MQTT, DIAL fallback)
+
+    func loadApps() async {
+        guard let creds = titan else { return }
+        do {
+            let apps = try await TitanClient.installedApps(creds)
+            if !apps.isEmpty { tvApps = apps }
+        } catch {
+            AppState.log("titan apps ERROR: \(error)")
+        }
+    }
+
+    // DIAL names + required Origin, for launching without Titan pairing
+    private static let dial: [String: (String, String?)] = [
+        "youtube": ("YouTube", "https://www.youtube.com"),
+        "netflix": ("Netflix", "https://www.netflix.com"),
+        "prime_video": ("AmazonInstantVideo", nil),
+    ]
+
+    func launch(_ app: TitanApp) {
+        Task {
+            do {
+                if let creds = titan {
+                    try await TitanClient.launch(creds, code: app.code, url: app.url)
+                } else if let (name, origin) = Self.dial[app.code], let c = client {
+                    try await c.launchDIAL(name, origin: origin)
+                } else {
+                    statusMessage = "\(app.name) needs Titan pairing"
+                    return
+                }
+                statusMessage = ""
+                lastLaunched = app
+            } catch {
+                AppState.log("launch \(app.code) ERROR: \(error)")
+                statusMessage = "Couldn't open \(app.name)"
+            }
+        }
+    }
+
+    func startTitanPairing() {
+        let t = TitanClient(host: client?.host ?? pairingHost)
+        titanPairing = t
+        statusMessage = "Contacting the TV…"
+        Task {
+            do {
+                try await t.startPairing()
+                titanAwaitingPIN = true
+                statusMessage = "Enter the PIN shown on the TV"
+            } catch {
+                AppState.log("titan pair start ERROR: \(error)")
+                statusMessage = "Titan pairing failed"
+            }
+        }
+    }
+
+    func finishTitanPairing() {
+        guard let t = titanPairing else { return }
+        let pin = titanPIN
+        Task {
+            do {
+                titan = try await t.finishPairing(pin: pin)
+                statusMessage = ""
+                await loadApps()
+            } catch {
+                AppState.log("titan pair finish ERROR: \(error)")
+                statusMessage = "Invalid PIN — try again"
+            }
+            titanAwaitingPIN = false
+            titanPIN = ""
+            titanPairing = nil
         }
     }
 
@@ -64,15 +292,15 @@ final class AppState: ObservableObject {
     func startPairing() {
         let c = PhilipsClient(host: pairingHost)
         client = c
-        statusMessage = "TV'ye istek gönderiliyor…"
+        statusMessage = "Contacting the TV…"
         Task {
             do {
                 let (_, ts) = try await c.pairRequest()
                 pairingTimestamp = ts
                 pairingAwaitingPIN = true
-                statusMessage = "TV ekranındaki PIN'i gir"
+                statusMessage = "Enter the PIN shown on the TV"
             } catch {
-                statusMessage = "İstek başarısız — IP doğru mu?"
+                statusMessage = "Request failed — is the IP right?"
             }
         }
     }
@@ -89,7 +317,7 @@ final class AppState: ObservableObject {
                 statusMessage = ""
                 await refresh()
             } catch {
-                statusMessage = "PIN geçersiz / süresi doldu — tekrar dene"
+                statusMessage = "Invalid / expired PIN — try again"
                 pairingAwaitingPIN = false
             }
         }

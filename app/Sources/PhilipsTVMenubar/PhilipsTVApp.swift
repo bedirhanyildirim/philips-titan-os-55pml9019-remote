@@ -8,7 +8,7 @@ struct PhilipsTVApp: App {
         MenuBarExtra {
             ContentView()
                 .environmentObject(state)
-                .frame(width: 300)
+                .frame(width: 340)
         } label: {
             Image(systemName: state.isOn ? "tv.fill" : "tv")
         }
@@ -22,36 +22,149 @@ struct ContentView: View {
     @EnvironmentObject var state: AppState
     var body: some View {
         ZStack {
-            Color.black.opacity(0.92).ignoresSafeArea()
+            Theme.bg.ignoresSafeArea()
             if state.needsPairing {
                 PairingView()
             } else {
-                ControlView()
+                MainView()
             }
         }
         .foregroundStyle(.white)
+        .preferredColorScheme(.dark)
+        .tint(Theme.accent)
     }
 }
 
-// MARK: - Pairing
+enum Tab: String, CaseIterable, Identifiable {
+    case home, remote, apps, sources, orange, ambilight, settings
+    var id: String { rawValue }
+    var icon: String {
+        switch self {
+        case .home: return "tv"
+        case .remote: return "circle.grid.cross"
+        case .apps: return "square.grid.2x2"
+        case .sources: return "cable.connector"
+        case .orange: return "tv.and.mediabox"
+        case .ambilight: return "sparkles"
+        case .settings: return "slider.horizontal.3"
+        }
+    }
+    var title: String {
+        switch self {
+        case .home: return "Home"
+        case .remote: return "Remote"
+        case .apps: return "Apps"
+        case .sources: return "Sources"
+        case .orange: return "Orange TV"
+        case .ambilight: return "Ambilight"
+        case .settings: return "Settings"
+        }
+    }
+}
+
+struct MainView: View {
+    @EnvironmentObject var state: AppState
+    @AppStorage("tab") private var tab: Tab = .home
+
+    var body: some View {
+        VStack(spacing: 12) {
+            header
+            tabBar
+            ScrollView(showsIndicators: false) {
+                Group {
+                    switch tab {
+                    case .home: HomeTab(tab: $tab)
+                    case .remote: RemoteTab()
+                    case .apps: AppsTab()
+                    case .sources: SourcesTab()
+                    case .orange: OrangeTab()
+                    case .ambilight: AmbilightView()
+                    case .settings: SettingsTab()
+                    }
+                }
+                .padding(.bottom, 4)
+            }
+            .frame(height: 470)
+            footer
+        }
+        .padding(14)
+    }
+
+    private var header: some View {
+        HStack(spacing: 10) {
+            Text("PHILIPS").font(.system(size: 10, weight: .heavy)).tracking(1.5)
+                .foregroundStyle(Theme.accent)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Philips TV").font(.system(size: 15, weight: .bold))
+                Text("Titan OS").font(.system(size: 10)).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button {
+                state.key("Standby")
+                Task { try? await Task.sleep(nanoseconds: 1_500_000_000); await state.refresh() }
+            } label: {
+                Image(systemName: "power")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(state.isOn ? Theme.accent : .secondary)
+                    .frame(width: 30, height: 30)
+            }.buttonStyle(.plain)
+        }
+    }
+
+    private var tabBar: some View {
+        HStack(spacing: 4) {
+            ForEach(Tab.allCases) { t in
+                Button { tab = t } label: {
+                    Image(systemName: t.icon)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(tab == t ? Theme.accent : .secondary)
+                        .frame(maxWidth: .infinity).frame(height: 34)
+                        .background(tab == t ? Theme.accent.opacity(0.18) : .clear,
+                                    in: RoundedRectangle(cornerRadius: 9))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(t.title)
+            }
+        }
+        .padding(4)
+        .background(Theme.card, in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private var footer: some View {
+        HStack(spacing: 6) {
+            Circle().fill(state.statusMessage.isEmpty && state.isOn ? Color.green : Color.orange)
+                .frame(width: 6, height: 6)
+            Text(state.statusMessage.isEmpty ? (state.isOn ? "Connected" : "TV off") : state.statusMessage)
+                .font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
+            Spacer()
+            Text(state.modelName).font(.system(size: 9, weight: .medium)).foregroundStyle(.tertiary)
+            Button { Task { await state.refresh(); await state.loadApps() } } label: {
+                Image(systemName: "arrow.clockwise").font(.system(size: 10))
+            }.buttonStyle(.plain).foregroundStyle(.secondary).help("Refresh")
+        }
+    }
+}
+
+// MARK: - Pairing (JointSpace)
 
 struct PairingView: View {
     @EnvironmentObject var state: AppState
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Philips TV'yi Eşleştir").font(.headline)
+            Text("Pair your Philips TV").font(.headline)
             if !state.pairingAwaitingPIN {
-                Text("TV'nin IP adresi").font(.caption).foregroundStyle(.secondary)
+                Text("TV IP address").font(.caption).foregroundStyle(.secondary)
                 TextField("192.168.0.45", text: $state.pairingHost)
                     .textFieldStyle(.roundedBorder)
-                Button("PIN İste") { state.startPairing() }
+                Button("Request PIN") { state.startPairing() }
                     .buttonStyle(.borderedProminent)
             } else {
-                Text("TV ekranındaki PIN'i gir").font(.caption).foregroundStyle(.secondary)
+                Text("Enter the PIN shown on the TV").font(.caption).foregroundStyle(.secondary)
                 TextField("1234", text: $state.pairingPIN)
                     .textFieldStyle(.roundedBorder)
                     .onSubmit { state.finishPairing() }
-                Button("Eşleştir") { state.finishPairing() }
+                Button("Pair") { state.finishPairing() }
                     .buttonStyle(.borderedProminent)
             }
             if !state.statusMessage.isEmpty {
@@ -59,173 +172,5 @@ struct PairingView: View {
             }
         }
         .padding(16)
-    }
-}
-
-// MARK: - Main controls
-
-struct ControlView: View {
-    @EnvironmentObject var state: AppState
-
-    var body: some View {
-        VStack(spacing: 14) {
-            header
-            volumeRow
-            dpad
-            mediaRow
-            AmbilightView()
-            sourceRow
-            keyboardRow
-            TrackpadView()
-            footer
-        }
-        .padding(16)
-    }
-
-    private var header: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(state.modelName.isEmpty ? "Philips TV" : state.modelName)
-                    .font(.headline)
-                Text(state.isOn ? "🟢 Açık" : "⚪️ Kapalı")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            Spacer()
-            Button { state.run("güç") { try await $0.sendKey("Standby") } } label: {
-                Image(systemName: "power")
-                    .font(.system(size: 18, weight: .bold))
-                    .frame(width: 40, height: 40)
-                    .background(state.isOn ? Color.blue : Color.gray.opacity(0.4), in: Circle())
-            }.buttonStyle(.plain)
-        }
-    }
-
-    private var volumeRow: some View {
-        HStack(spacing: 10) {
-            iconButton("speaker.wave.1.fill") { state.run { try await $0.sendKey("VolumeDown") } }
-            iconButton("speaker.slash.fill") { state.run { try await $0.sendKey("Mute") } }
-            iconButton("speaker.wave.3.fill") { state.run { try await $0.sendKey("VolumeUp") } }
-        }
-    }
-
-    private var dpad: some View {
-        VStack(spacing: 8) {
-            iconButton("chevron.up") { key("CursorUp") }
-            HStack(spacing: 8) {
-                iconButton("chevron.left") { key("CursorLeft") }
-                Button { key("Confirm") } label: {
-                    Text("OK").fontWeight(.bold)
-                        .frame(width: 56, height: 56)
-                        .background(Color.blue.opacity(0.8), in: Circle())
-                }.buttonStyle(.plain)
-                iconButton("chevron.right") { key("CursorRight") }
-            }
-            iconButton("chevron.down") { key("CursorDown") }
-            HStack(spacing: 8) {
-                smallButton("Geri", "arrow.uturn.backward") { key("Back") }
-                smallButton("Ana", "house.fill") { key("Home") }
-                smallButton("Menü", "line.3.horizontal") { key("Options") }
-            }
-        }
-    }
-
-    private var mediaRow: some View {
-        HStack(spacing: 8) {
-            iconButton("backward.end.fill") { key("Previous") }
-            iconButton("playpause.fill") { key("PlayPause") }
-            iconButton("stop.fill") { key("Stop") }
-            iconButton("forward.end.fill") { key("Next") }
-        }
-    }
-
-    private var sourceRow: some View {
-        HStack {
-            smallButton("Kaynak", "tv.and.hifispeaker.fill") { key("Source") }
-            Spacer()
-            if !state.currentApp.isEmpty {
-                Text("Aktif: \(state.currentApp)").font(.caption2).foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    @State private var typed: String = ""
-    private var keyboardRow: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "keyboard")
-            TextField("TV'ye yaz…", text: $typed)
-                .textFieldStyle(.roundedBorder)
-                .onSubmit { send() }
-            Button("Gönder") { send() }.buttonStyle(.bordered)
-        }
-    }
-    private func send() {
-        let t = typed; typed = ""
-        guard !t.isEmpty else { return }
-        state.run("klavye") { try await $0.textEntry(t) }
-    }
-
-    private var footer: some View {
-        HStack {
-            if !state.statusMessage.isEmpty {
-                Text(state.statusMessage).font(.caption2).foregroundStyle(.orange)
-            }
-            Spacer()
-            Button("Yenile") { Task { await state.refresh() } }.font(.caption2).buttonStyle(.plain)
-            Button("Çıkış") { NSApplication.shared.terminate(nil) }.font(.caption2).buttonStyle(.plain)
-        }
-    }
-
-    // helpers
-    private func key(_ k: String) { state.run(k) { try await $0.sendKey(k) } }
-
-    private func iconButton(_ sys: String, _ action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: sys)
-                .frame(width: 44, height: 44)
-                .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
-        }.buttonStyle(.plain)
-    }
-    private func smallButton(_ title: String, _ sys: String, _ action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Label(title, systemImage: sys).font(.caption)
-                .frame(maxWidth: .infinity).frame(height: 32)
-                .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
-        }.buttonStyle(.plain)
-    }
-}
-
-// MARK: - Trackpad (pointer control for the TV browser)
-
-struct TrackpadView: View {
-    @EnvironmentObject var state: AppState
-    @State private var last: CGPoint?
-
-    var body: some View {
-        VStack(spacing: 4) {
-            Text("🖱 Trackpad — sürükle, dokun = OK").font(.caption2).foregroundStyle(.secondary)
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.white.opacity(0.06))
-                .frame(height: 90)
-                .overlay(Image(systemName: "hand.point.up.left.fill").foregroundStyle(.white.opacity(0.25)))
-                .gesture(
-                    DragGesture(minimumDistance: 0)
-                        .onChanged { v in
-                            if let last = last {
-                                let dx = Int((v.location.x - last.x) * 2.2)
-                                let dy = Int((v.location.y - last.y) * 2.2)
-                                if abs(dx) > 1 || abs(dy) > 1 {
-                                    state.run { try await $0.pointerMove(dx, dy) }
-                                    self.last = v.location
-                                }
-                            } else { last = v.location }
-                        }
-                        .onEnded { v in
-                            if let l = last, abs(v.location.x - l.x) < 3, abs(v.location.y - l.y) < 3 {
-                                state.run { try await $0.sendKey("Confirm") }
-                            }
-                            last = nil
-                        }
-                )
-        }
     }
 }

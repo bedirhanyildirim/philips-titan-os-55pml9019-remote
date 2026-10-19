@@ -208,11 +208,37 @@ final class PhilipsClient: NSObject, URLSessionDelegate, @unchecked Sendable {
     func pointerMove(_ dx: Int, _ dy: Int) async throws { try await request("input/pointer", method: "POST", body: ["x": dx, "y": dy]) }
     func currentActivity() async throws -> String { (try await json("activities/current"))["id"] as? String ?? "" }
 
+    /// `styleName: OFF` is accepted but doesn't turn the lights off; power does.
+    func setAmbilightPower(_ on: Bool) async throws {
+        try await request("ambilight/power", method: "POST", body: ["power": on ? "On" : "Off"])
+    }
+
     func setAmbilight(style: String, menu: String? = nil, algorithm: String? = nil) async throws {
         var cfg: [String: Any] = ["styleName": style, "isExpert": false]
         if let menu = menu { cfg["menuSetting"] = menu }
         if let algorithm = algorithm { cfg["algorithm"] = algorithm }
         try await request("ambilight/currentconfiguration", method: "POST", body: cfg)
+    }
+
+    // MARK: - DIAL (app launch)
+
+    /// Launch an app through the TV's DIAL server (plain HTTP on :56789, no pairing).
+    /// JointSpace's /applications is 403 on Titan OS, but DIAL is open. The TV keeps a
+    /// per-app Origin allow-list: a POST without the right Origin gets 403
+    /// (e.g. YouTube → https://www.youtube.com, Netflix → https://www.netflix.com).
+    func launchDIAL(_ app: String, origin: String?) async throws {
+        var req = URLRequest(url: URL(string: "http://\(host):56789/apps/\(app)")!)
+        req.httpMethod = "POST"
+        req.httpBody = Data()
+        req.setValue("text/plain; charset=\"utf-8\"", forHTTPHeaderField: "Content-Type")
+        if let origin = origin { req.setValue(origin, forHTTPHeaderField: "Origin") }
+        let (_, resp) = try await session.data(for: req)
+        let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
+        // 201 = launched, 200 = already running and brought to front
+        guard code == 200 || code == 201 else {
+            AppState.log("HTTP \(code) DIAL \(app)")
+            throw PhilipsError.launch("\(app): HTTP \(code)")
+        }
     }
 
     // MARK: - URLSessionDelegate (self-signed TLS + HTTP Digest)
@@ -250,7 +276,8 @@ final class PhilipsClient: NSObject, URLSessionDelegate, @unchecked Sendable {
 
 enum PhilipsError: LocalizedError {
     case pairing(String)
+    case launch(String)
     var errorDescription: String? {
-        switch self { case .pairing(let m): return m }
+        switch self { case .pairing(let m), .launch(let m): return m }
     }
 }

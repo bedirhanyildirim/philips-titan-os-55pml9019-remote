@@ -6,9 +6,8 @@
 ## What this is
 
 A native **macOS menu bar app** (SwiftUI) to control a **Philips Titan OS TV**
-over the local network, plus a Python reference client and DNS ad-blocking tools.
-Scope is **TV + Ambilight + soundbar** (not a full smart-home dashboard — the
-3D-house reference app by @0xProbabillity was only aesthetic inspiration).
+over the local network — apps, sources, remote, Ambilight — plus the **Orange TV box**
+on HDMI 1, a Python reference client and DNS ad-blocking tools.
 
 Repo: https://github.com/bedirhanyildirim/philips_tv
 
@@ -22,8 +21,11 @@ Repo: https://github.com/bedirhanyildirim/philips_tv
   - **DMR / DLNA is ON** (can receive pushed media), **WoWLAN enabled**
 - **Soundbar:** Philips **TAB6309/10** on **HDMI 2** (eARC). TV speakers are OFF →
   volume rides HDMI-CEC to the soundbar.
-- **HDMI map:** 1 = "orange box" (likely **Orange Polska** Android-TV decoder, usually off),
-  2 = soundbar, 3 = empty (used to wire the Mac here for mirroring), 4 = empty.
+- **HDMI map:** 1 = **Orange Polska decoder** ("Orange TV Dekoder (Sagemcom)", IP
+  **192.168.0.244**, MAC b0:5b:99:c2:0b:35, Ethernet), 2 = soundbar ("Home Theatre System"),
+  3 = "Computer" (empty), 4 = empty.
+- **TV account:** user is logged into a Titan OS account (bedirhanyildirim96@gmail.com);
+  not needed for control.
 
 ## How it works (JointSpace v6)
 
@@ -46,6 +48,9 @@ Repo: https://github.com/bedirhanyildirim/philips_tv
 - **Keyboard:** `POST /6/input/textentry` `{"textentry":"..."}` — type into focused field.
 - **Pointer/trackpad:** `POST /6/input/pointer` `{"x":dx,"y":dy}` (relative).
 - **Current activity:** `GET /6/activities/current` (e.g. `{"id":"browser"}`).
+- **Ambilight power:** `POST /6/ambilight/power {"power":"Off"|"On"}` (styleName OFF is
+  accepted but doesn't turn lights off). ⚠️ Power Off is ALSO ignored physically on this TV
+  (API says Off, lights stay on) — open issue, see roadmap.
 - **Ambilight:** `POST /6/ambilight/currentconfiguration`:
   - Video: `{"styleName":"FOLLOW_VIDEO","menuSetting":M}` — M ∈ STANDARD, NATURAL,
     VIVID, GAME, COMFORT, RELAX, SPORTS (CINEMA is NOT accepted).
@@ -58,11 +63,69 @@ Repo: https://github.com/bedirhanyildirim/philips_tv
   - NOTE: while app-controlled, the TV's own Ambilight menu shows "Follow App" and
     locks its manual presets — this is expected.
 
+## Titan OS MQTT (:8883) — the real control channel (2026-10-20)
+
+Reverse-engineered from the official **Titan OS Mobile** app (`tv.titanos.eos.mobile` 1.4.4).
+- MQTT **v5 over TLS** on 8883; server cert chains to **"Titanos Root CA"** (bundled in
+  `philipstv/titan_ca.crt` and embedded in `TitanClient.swift`); no client cert, no hostname check.
+  mDNS: `_secure-mqtt._tcp`. Retained `info` topic lists supported topics.
+- **Pairing:** anonymous connect → request `pairing/start` `{"type":"mobile"}` (lowercase!)
+  → TV shows 4-digit PIN → `pairing/finish` `{"username":<uuid>,"challenge_result":
+  hex(HMAC-SHA256(key=PIN, msg=challenge))}` → `{"data":{"password":…}}`.
+  Creds: `~/.philips-tv-remote/titan_mqtt.json`.
+- **Request pattern:** subscribe `<topic>/<uuid>`, PUBLISH to `<topic>` with MQTT5
+  ResponseTopic + CorrelationData = that string; reply `{"data":…}` / `{"error":{code,message}}`.
+- **Launch apps:** `deeplink` `{"app_code":"disney","url":"disneyplus"}` — this TV offers
+  `deeplink` (v1), not `deeplink_v2`. Codes/urls from `proxy` → `/v1/me/user_apps`.
+  Verified: YouTube, Netflix, Prime, Disney+, HBO Max (`max`, `https://titan.play.max.com`),
+  tabii, Internet browser. ⚠️ A non-special app_code + `localfunction:` url → Chromium
+  "blocked" page.
+- **Remote keys:** `rc` `{"key_code":N}` Linux keycodes (Home 102, OK 352, Back 158,
+  arrows 103/108/105/106, Vol 115/114, Mute 113, Power 116, Sources 394, KEY_TV 377 =
+  last tuner). Works even when JointSpace hangs. **Keyboard:** `keyboard` `{"opcode":0,"text":"a"}`.
+- **Account API via TV:** `proxy` `{"endpoint":"/v1/me/favorites"|"/v1/me/watchlists"|…,
+  "method":"GET","authenticated":true,"api":"gaea", …}` — favourites/watchlist readable.
+- `settings` only has tvname/wowlan get/set; `automation/set`, `screenshot` don't reply.
+- **`channels/state`** (retained): `"launcher"` on Home, `"inactive"` otherwise.
+
+## Sources (HDMI) — Sources-drawer macro over MQTT `rc`
+
+No API for inputs (`/6/sources*` 403, nothing in MQTT). Drawer is a vertical list:
+0 Satellite, 1 Antenna, 2 Streaming, **3 Screen mirroring (never OK!)**, 4 USB, 5 Network,
+6 HDMI1 Orange, 7 HDMI2 Home Theatre, 8 HDMI3 Computer, 9 HDMI4. Focus opens on the
+**current** source; the list **doesn't wrap** (verified both ends). Macro:
+`Home(wait 2s) → 394(wait 2s) → Down×12 → Up×n → OK` for HDMI (n = 3,2,1,0), or
+`Up×12 → Down×n` for Satellite/Antenna; ~0.4 s between arrows. Verified on HDMI 1/3/4.
+Context after: `WatchExtension` (any HDMI), `WatchSatellite`, `NetTv` (home/apps).
+Can't tell which HDMI port is active.
+
+## DIAL (:56789) — fallback without Titan pairing
+
+`POST http://<tv>:56789/apps/<Name>` with per-app **Origin** (else 403):
+YouTube/YouTubeKids → `https://www.youtube.com`, Netflix → `https://www.netflix.com`,
+`AmazonInstantVideo` → no Origin needed. Disney+/Max aren't DIAL apps.
+
+## Orange TV box (192.168.0.244)
+
+Sagemcom, SoftAtHome 1.7.19, Polish-only UI (no menu language option — only audio
+"Wersja językowa" and subtitles). Same local API as Orange France Livebox decoders, no auth:
+- `GET :8080/remoteControl/cmd?operation=10` → `activeStandbyState` ("0" on, "1" standby),
+  `osdContext` (HOMEPAGE/LIVE/MYACCOUNT…), `playedMediaId` (channel id; 14135 = TVP1).
+- `operation=01&key=<code>&mode=0` → keys (same Linux codes; CH± 402/403, digits 512–521,
+  menu 139). Verified: arrows, Back, OK, Menu, CH+, digit 1.
+- `operation=09&epg_id=…` (France-style tune by id) → invalid / hangs here. Use digits.
+- ⚠️ `wolSupport: "0"`. Sending Power (116) while it was in standby made it drop off the
+  network entirely — only its own remote brings it back. Power from the app is untested.
+- Box HDMI-CEC is **off** (and TV EasyLink off), so the TV doesn't auto-switch to HDMI 1.
+
 ## What's blocked / dead ends (don't re-litigate)
 
-- **`/applications`, `/sources`, `/applicationstore` → 403** on api v1/5/6, GET+POST.
-  Firmware ACL, NOT bypassable client-side. So **no direct app launch / HDMI source
-  select via the API.** Workaround: send `Source`/`Home` key + navigate with the d-pad.
+- **JointSpace `/applications`, `/sources`, `/applicationstore`, `/apps`, `/favoritelist`
+  → 403**; `activities/launch` → 405. Use Titan MQTT / DIAL instead (see above).
+- `POST /6/activities/browser {"url":…}` → 200 but does nothing visible (not a URL opener).
+- Unknown JointSpace key names always return 200 — no Netflix/Disney key exists.
+- Philips "Smart TV" Android app (com.tpvision.philipstvapp2): no Titan app launching.
+- **`/6/channeldb/*` and big `menuitems/*` dumps hang JointSpace** → TV must be unplugged.
 - **Matter** (added TV to Apple Home via code): Apple Home shows "not supported" —
   no useful controls. Dead end for source/app.
 - **Spotify on Titan OS:** not in the store, no sideloading; browser won't work (Nagra DRM).
@@ -84,6 +147,8 @@ Repo: https://github.com/bedirhanyildirim/philips_tv
    Python `requests`. See `PhilipsClient.digestHeader(...)`.
 3. **Swift @MainActor:** `AppState.log` must be `nonisolated` (called from the client's
    background context).
+4. **First launch after a rebuild** briefly fails with "Local network prohibited";
+   `AppState.startup()` retries. Plain-HTTP to LAN needs `NSAllowsLocalNetworking` (set).
 
 ## Project layout
 
@@ -95,12 +160,15 @@ philips_tv/
 │   ├── Package.swift, build.sh, make-signing-cert.sh
 │   ├── Resources/Info.plist   (LSUIElement + NSLocalNetworkUsageDescription)
 │   └── Sources/PhilipsTVMenubar/
-│       ├── PhilipsClient.swift  (JointSpace v6: pairing, manual digest, commands)
-│       ├── AppState.swift       (@MainActor ObservableObject)
-│       ├── PhilipsTVApp.swift   (MenuBarExtra + ControlView + Trackpad)
-│       └── AmbilightView.swift  (Video/Audio/Colour picker)
-├── philipstv/              ← Python reference client (CLI + testing)
-├── pair.py, run.py
+│       ├── PhilipsClient.swift  (JointSpace v6: pairing, manual digest, keys, Ambilight, DIAL)
+│       ├── TitanClient.swift    (Titan OS MQTT v5 — hand-rolled on Network.framework)
+│       ├── OrangeClient.swift   (Orange box HTTP API)
+│       ├── AppState.swift       (@MainActor state; launch, key routing, source macro, Orange)
+│       ├── PhilipsTVApp.swift   (MenuBarExtra, header, 7-tab bar, footer)
+│       ├── Theme.swift          (cards/buttons)
+│       └── HomeTab, RemoteTab, AppsTab, SourcesTab, OrangeTab, AmbilightView, SettingsTab
+├── philipstv/              ← Python reference client (client.py, titan.py, orange.py)
+├── pair.py, titan_pair.py, run.py
 └── dns/                    ← DNS ad-blocking (sinkhole + blocklist)
 ```
 
@@ -118,23 +186,37 @@ open dist/PhilipsTVMenubar.app
 
 ## Roadmap (pick up here)
 
+- [ ] **Ambilight Off** — confirmed 2026-10-20: `POST ambilight/power Off` returns 200 and
+      GET reports "Off", but the lights stay on. Try `input/key AmbilightOnOff`, or
+      `ambilight/mode manual` + black `ambilight/cached`.
+- [ ] **Pointer (trackpad) + keyboard don't work** (user report, 2026-10-20). Keyboard now
+      goes over MQTT `keyboard {"opcode":0,"text":<char>}` — verify the payload (maybe whole
+      string / needs a focused field); pointer still uses JointSpace `input/pointer` — check
+      if Titan ignores it outside the browser.
+- [ ] **Orange channel list** — map channel ids (`playedMediaId`) ↔ names/logos/numbers
+      (Orange Polska EPG / Orange TV Go APIs) and add a searchable channel list that tunes
+      via digits. A research agent was started on this.
+- [ ] **Orange power** — test Power (116) on→standby keeps it on the network; if not,
+      hide power-off in the app.
+- [ ] Verify guessed rc keycodes on the TV: Next 163, Previous 165, FF 208, Rewind 168, Info 358.
+- [ ] **Watchlist/favourites UI** via Titan `proxy` (`/v1/me/watchlists` POST/DELETE with
+      `content_id`, `/v1/contents/{id}/deeplinkings` to open a show in its app).
+- [x] App launching (any app) — Titan MQTT `deeplink` + DIAL fallback.
+- [x] Source switching — Sources-drawer macro (Sources tab).
+- [x] UI redesign — tabbed layout, English UI.
+
 - [ ] **Ambilight custom colour picker (HSB).** `FOLLOW_COLOR`+`MANUAL_HUE` with raw
       `colorSettings{color{hue,saturation,brightness}}` returned 200 but SNAPPED to a
       preset (PTA_LOUNGE). Needs investigation: likely `isExpert:true` + exact
       `colorSettings`/`colorDelta`/`speed` shape. Presets already work.
 - [ ] **DLNA "send to TV"** (photo/music/video) — DMR is ON; the working version of the
       "show my own content instead of ads" idea.
-- [ ] **UI polish** — glassy/dark aesthetic closer to the reference apps; animations,
-      better layout, app icon.
-- [ ] **Source switching UX** — `Source` key + d-pad macro (direct select is 403).
+- [ ] **UI polish** — app icon, animations.
 - [ ] **Wake-on-LAN** to power the TV on from standby (WoWLAN enabled; MAC known).
 - [ ] **Login item / auto-start** (System Settings → Login Items, or a LaunchAgent).
-- [ ] **Orange box (HDMI 1)** — if it's an Android-TV Orange Polska decoder: Wake-on-LAN
-      (its Menu→Network→Wake on LAN) + network remote (its Network→TV Remote App Settings)
-      or ADB. Need its model + IP + enabling those settings on the box.
-- [ ] **Official Philips app APK reverse-engineering** — to confirm whether source/app
-      control is possible at all (it pairs with the same PIN/JointSpace, so likely at
-      parity with us; QR code is just to download the app). Use jadx/REA on the APK.
+- [x] **Orange box (HDMI 1)** — found on the LAN; local HTTP remote API works (Orange tab).
+- [x] **APK reverse-engineering** — Philips Smart TV app (dead end) and Titan OS Mobile
+      (→ MQTT protocol) analysed with jadx.
 
 ## Ideas & explored concepts (keep for future chats)
 
@@ -156,16 +238,9 @@ open dist/PhilipsTVMenubar.app
   Mirroring input via key nav, and/or (b) DLNA-pushes a chosen file.
 
 ### Orange box (HDMI 1) control
-- Almost certainly an **Orange Polska TV decoder**; current models (4K, 4K Stream,
-  4K Multi, 4K Duo) run **Android TV** (e.g. 4K Duo = Android TV 14, Amlogic S905X5M).
-- Possible control paths IF it's an Android-TV model and on the LAN:
-  - **Wake-on-LAN** to power it on (enable on the box: Menu → Network → Wake on LAN).
-  - **Network remote** ("Orange Box Remote" — enable on the box: Network → TV Remote
-    App Settings).
-  - **ADB over TCP** (Android TV) for full control / app launch.
-- Needed to proceed: the box's exact **model + IP + MAC**, and enabling the above on
-  the box itself. Then integrate as a second device in the app (power via WoL, keys via
-  Android TV Remote v2 protocol or ADB).
+- Done — it's a Sagemcom/SoftAtHome box (not Android TV), see "Orange TV box" above.
+- Idea: enable HDMI-CEC on the box (Moje konto → Ustawienia → HDMI-CEC) and EasyLink on
+  the TV so powering the box auto-switches the TV to HDMI 1.
 
 ### "Show my own images instead of ads"
 - Redirecting ad DNS to our own server does NOT work: ads are HTTPS (can't forge

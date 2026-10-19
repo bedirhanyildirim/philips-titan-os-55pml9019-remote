@@ -5,23 +5,38 @@ import SwiftUI
 struct AmbilightView: View {
     @EnvironmentObject var state: AppState
     @State private var category: Category = .video
+    @State private var selected: String?
 
     enum Category: String, CaseIterable, Identifiable {
-        case video = "Video", audio = "Ses", colour = "Renk"
+        case video = "Video", audio = "Audio", colour = "Colour"
         var id: String { rawValue }
+        var icon: String {
+            switch self {
+            case .video: return "film"
+            case .audio: return "waveform"
+            case .colour: return "paintpalette"
+            }
+        }
+        var hint: String {
+            switch self {
+            case .video: return "Lights follow the picture on screen"
+            case .audio: return "Lights move with the music"
+            case .colour: return "A fixed colour or white tone"
+            }
+        }
     }
 
     // (label, menuSetting) — styleName FOLLOW_VIDEO
     private let videoModes: [(String, String)] = [
-        ("Standart", "STANDARD"), ("Doğal", "NATURAL"), ("Canlı", "VIVID"),
-        ("Oyun", "GAME"), ("Konfor", "COMFORT"), ("Rahat", "RELAX"), ("Spor", "SPORTS"),
+        ("Standard", "STANDARD"), ("Natural", "NATURAL"), ("Vivid", "VIVID"),
+        ("Game", "GAME"), ("Comfort", "COMFORT"), ("Relax", "RELAX"), ("Sports", "SPORTS"),
     ]
     // (label, algorithm) — styleName FOLLOW_AUDIO
     private let audioModes: [(String, String)] = [
         ("Lumina", "ENERGY_ADAPTIVE_BRIGHTNESS"), ("Colora", "ENERGY_ADAPTIVE_COLORS"),
-        ("Retro", "VU_METER"), ("Spektrum", "SPECTRUM_ANALYZER"),
-        ("Tarayıcı", "KNIGHT_RIDER_CLOCKWISE"), ("Ritim", "RANDOM_PIXEL_FLASH"),
-        ("Strobe", "STROBE"), ("Parti", "PARTY"),
+        ("Retro", "VU_METER"), ("Spectrum", "SPECTRUM_ANALYZER"),
+        ("Scanner", "KNIGHT_RIDER_CLOCKWISE"), ("Rhythm", "RANDOM_PIXEL_FLASH"),
+        ("Strobe", "STROBE"), ("Party", "PARTY"),
     ]
     // (label, menuSetting, swatch) — styleName FOLLOW_COLOR
     private let colourModes: [(String, String, Color)] = [
@@ -30,23 +45,42 @@ struct AmbilightView: View {
         ("Cool White", "PTA_LOUNGE", Color(.sRGB, red: 0.85, green: 0.92, blue: 1)),
     ]
 
-    private let cols = [GridItem(.adaptive(minimum: 78), spacing: 6)]
+    private let cols = Array(repeating: GridItem(.flexible(), spacing: 6), count: 3)
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text("🎨 Ambilight").font(.caption).foregroundStyle(.secondary)
-                Spacer()
-                Button("Kapat") { set(style: "OFF") }
-                    .font(.caption2).buttonStyle(.plain)
-                    .padding(.horizontal, 8).padding(.vertical, 2)
-                    .background(Color.white.opacity(0.08), in: Capsule())
+        VStack(spacing: 10) {
+            SectionLabel(text: "Ambilight")
+            Card {
+                HStack(spacing: 12) {
+                    Image(systemName: "sparkles").font(.system(size: 20))
+                        .foregroundStyle(state.glow)
+                        .frame(width: 44, height: 44)
+                        .background(state.glow.opacity(0.18), in: RoundedRectangle(cornerRadius: 12))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(selected ?? "Ambilight").font(.system(size: 13, weight: .semibold))
+                        Text(category.hint).font(.system(size: 10)).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    PillButton(title: "Off", tint: Color.red.opacity(0.35)) {
+                        selected = "Off"; state.glow = .gray
+                        state.run("Ambilight") { try await $0.setAmbilightPower(false) }
+                    }
+                }
             }
-            Picker("", selection: $category) {
-                ForEach(Category.allCases) { Text($0.rawValue).tag($0) }
+            HStack(spacing: 4) {
+                ForEach(Category.allCases) { c in
+                    Button { category = c } label: {
+                        Label(c.rawValue, systemImage: c.icon).font(.system(size: 11, weight: .medium))
+                            .frame(maxWidth: .infinity).frame(height: 30)
+                            .foregroundStyle(category == c ? Theme.accent : .secondary)
+                            .background(category == c ? Theme.accent.opacity(0.18) : .clear,
+                                        in: RoundedRectangle(cornerRadius: 8))
+                            .contentShape(Rectangle())
+                    }.buttonStyle(.plain)
+                }
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
+            .padding(4)
+            .background(Theme.card, in: RoundedRectangle(cornerRadius: 11))
 
             LazyVGrid(columns: cols, spacing: 6) {
                 switch category {
@@ -60,7 +94,7 @@ struct AmbilightView: View {
                     }
                 case .colour:
                     ForEach(colourModes, id: \.1) { m in
-                        chip(m.0, dot: m.2) { set(style: "FOLLOW_COLOR", menu: m.1) }
+                        chip(m.0, dot: m.2) { state.glow = m.2; set(style: "FOLLOW_COLOR", menu: m.1) }
                     }
                 }
             }
@@ -68,17 +102,26 @@ struct AmbilightView: View {
     }
 
     private func chip(_ title: String, dot: Color? = nil, _ action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 4) {
+        let on = selected == title
+        return Button {
+            selected = title
+            if dot == nil { state.glow = Theme.accent }
+            action()
+        } label: {
+            HStack(spacing: 5) {
                 if let dot = dot { Circle().fill(dot).frame(width: 8, height: 8) }
-                Text(title).font(.caption2).lineLimit(1)
+                Text(title).font(.system(size: 11, weight: .medium)).lineLimit(1)
             }
-            .frame(maxWidth: .infinity).frame(height: 28)
-            .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+            .frame(maxWidth: .infinity).frame(height: 34)
+            .background(on ? Theme.accent.opacity(0.2) : Theme.card, in: RoundedRectangle(cornerRadius: 10))
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(on ? Theme.accent : Theme.cardStroke))
         }.buttonStyle(.plain)
     }
 
     private func set(style: String, menu: String? = nil, algorithm: String? = nil) {
-        state.run("Ambilight") { try await $0.setAmbilight(style: style, menu: menu, algorithm: algorithm) }
+        state.run("Ambilight") {
+            try await $0.setAmbilightPower(true)
+            try await $0.setAmbilight(style: style, menu: menu, algorithm: algorithm)
+        }
     }
 }
