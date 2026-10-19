@@ -189,6 +189,12 @@ open dist/PhilipsTVMenubar.app
 - [ ] **Ambilight Off** — confirmed 2026-10-20: `POST ambilight/power Off` returns 200 and
       GET reports "Off", but the lights stay on. Try `input/key AmbilightOnOff`, or
       `ambilight/mode manual` + black `ambilight/cached`.
+- [ ] **Power state is wrong when the TV is off** (2026-10-20): after turning the TV off with
+      the remote, `GET /6/powerstate` still returns `"On"` (JointSpace keeps running in
+      Titan's quick standby), so the app shows "TV on". MQTT `state/power` had no retained
+      message; `channels/state` read `{"state":"inactive"}`. Find a reliable signal (e.g.
+      subscribe to `state/power` and watch it change on power toggle, `context`, ambilight
+      processed values) and poll it periodically in the app.
 - [ ] **Pointer (trackpad) + keyboard don't work** (user report, 2026-10-20). Keyboard now
       goes over MQTT `keyboard {"opcode":0,"text":<char>}` — verify the payload (maybe whole
       string / needs a focused field); pointer still uses JointSpace `input/pointer` — check
