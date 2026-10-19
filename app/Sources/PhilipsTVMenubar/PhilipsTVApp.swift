@@ -73,7 +73,7 @@ struct ControlView: View {
             volumeRow
             dpad
             mediaRow
-            ambilightRow
+            AmbilightView()
             sourceRow
             keyboardRow
             TrackpadView()
@@ -138,18 +138,6 @@ struct ControlView: View {
         }
     }
 
-    private var ambilightRow: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("🎨 Ambilight").font(.caption).foregroundStyle(.secondary)
-            HStack(spacing: 8) {
-                tag("Video") { state.run { try await $0.setAmbilight(style: "FOLLOW_VIDEO", menu: "NATURAL") } }
-                tag("Ses") { state.run { try await $0.setAmbilight(style: "FOLLOW_AUDIO", algorithm: "VU_METER") } }
-                tag("Parti") { state.run { try await $0.setAmbilight(style: "FOLLOW_AUDIO", algorithm: "PARTY") } }
-                tag("Kapat") { state.run { try await $0.setAmbilight(style: "OFF") } }
-            }
-        }
-    }
-
     private var sourceRow: some View {
         HStack {
             smallButton("Kaynak", "tv.and.hifispeaker.fill") { key("Source") }
@@ -202,13 +190,6 @@ struct ControlView: View {
             Label(title, systemImage: sys).font(.caption)
                 .frame(maxWidth: .infinity).frame(height: 32)
                 .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
-        }.buttonStyle(.plain)
-    }
-    private func tag(_ title: String, _ action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title).font(.caption2)
-                .frame(maxWidth: .infinity).frame(height: 28)
-                .background(Color.white.opacity(0.08), in: Capsule())
         }.buttonStyle(.plain)
     }
 }
