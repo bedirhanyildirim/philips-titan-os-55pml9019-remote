@@ -11,6 +11,12 @@ dist/
 # macOS
 .DS_Store
 
+# Swift / SwiftPM build artifacts
+app/.build/
+app/dist/
+.swiftpm/
+*.xcodeproj
+
 # Local TV credentials — NEVER commit (contains the paired auth_key)
 credentials.json
 pair_state.json

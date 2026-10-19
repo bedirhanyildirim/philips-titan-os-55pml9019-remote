@@ -39,7 +39,31 @@ which is the implementation that works on current Titan OS firmware. The older
 > `VolumeUp` / `VolumeDown` / `Mute` **keys**, which the TV relays to the soundbar
 > over HDMI-CEC.
 
-## Install
+## Native macOS app (SwiftUI) — recommended
+
+A polished menu bar app lives in [`app/`](app/) (SwiftUI, `MenuBarExtra`).
+Dark glassy popover with power, volume, d-pad, media, Ambilight styles, a
+**keyboard** field and a **trackpad** for the TV browser.
+
+Install on each Mac:
+
+```bash
+git clone https://github.com/bedirhanyildirim/philips_tv.git
+cd philips_tv/app
+./build.sh
+open dist/PhilipsTVMenubar.app
+```
+
+Requires the Xcode Command Line Tools (`xcode-select --install`) and macOS 13+.
+First launch shows a pairing screen (enter the TV's IP, then the on-screen PIN).
+Credentials are stored per-Mac in `~/.philips-tv-remote/credentials.json`.
+
+To auto-start it at login: System Settings → General → Login Items → add
+`PhilipsTVMenubar.app`.
+
+## Python CLI / tools
+
+The `philipstv/` package is the reference client (also used for DNS tooling).
 
 ```bash
 git clone https://github.com/bedirhanyildirim/philips_tv.git
