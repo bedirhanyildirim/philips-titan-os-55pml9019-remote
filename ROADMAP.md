@@ -117,8 +117,8 @@ Sagemcom, SoftAtHome 1.7.19, Polish-only UI (no menu language option — only au
 - ⚠️ `wolSupport: "0"`. Sending Power (116) while it was in standby made it drop off the
   network entirely — only its own remote brings it back. Power from the app is untested.
 - **Power sync works (2026-10-20):** powering the Orange box on also turned the TV on, and
-  powering it off turned the TV off — i.e. HDMI-CEC is effectively active between them
-  (box CEC was likely switched on during the settings session). Box stays reachable in
+  powering it off turned the TV off — the user enabled HDMI-CEC on the box
+  (Moje konto → Ustawienia → HDMI-CEC → CEC włączony). Box stays reachable in
   standby (`activeStandbyState: "1"`, `osdContext: MAIN_PROCESS`). Still to confirm: whether
   this was via the app's Power button or the Orange remote, and whether the TV also
   auto-switches to HDMI 1.
