@@ -70,14 +70,75 @@ final class PhilipsClient: NSObject, URLSessionDelegate, @unchecked Sendable {
     @discardableResult
     private func request(_ path: String, method: String = "GET",
                          body: [String: Any]? = nil, authed: Bool = true) async throws -> Data {
-        var req = URLRequest(url: url(path))
-        req.httpMethod = method
-        if let body = body {
-            req.httpBody = try JSONSerialization.data(withJSONObject: body)
-            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let bodyData = try body.map { try JSONSerialization.data(withJSONObject: $0) }
+        func build(auth: String?) -> URLRequest {
+            var req = URLRequest(url: url(path))
+            req.httpMethod = method
+            if let bodyData = bodyData {
+                req.httpBody = bodyData
+                req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            }
+            if let auth = auth { req.setValue(auth, forHTTPHeaderField: "Authorization") }
+            return req
         }
-        let (data, _) = try await session.data(for: req)
+
+        // 1) initial request (no auth). The TV answers 401 with a Digest challenge.
+        var (data, resp) = try await session.data(for: build(auth: nil))
+        var http = resp as? HTTPURLResponse
+
+        // 2) compute the Digest response ourselves and retry (URLSession's built-in
+        //    digest handling doesn't work reliably with this TV).
+        if authed, http?.statusCode == 401,
+           let www = http?.value(forHTTPHeaderField: "Www-Authenticate")
+                    ?? http?.value(forHTTPHeaderField: "WWW-Authenticate"),
+           let user = authUser, let pass = authPass {
+            let header = Self.digestHeader(www: www, method: method,
+                                           uri: url(path).path, user: user, pass: pass)
+            (data, resp) = try await session.data(for: build(auth: header))
+            http = resp as? HTTPURLResponse
+        }
+
+        let code = http?.statusCode ?? -1
+        if code < 200 || code >= 300 { AppState.log("HTTP \(code) \(method) \(path)") }
         return data
+    }
+
+    // MARK: - manual HTTP Digest (matches Python requests' HTTPDigestAuth)
+
+    private static func md5(_ s: String) -> String {
+        Insecure.MD5.hash(data: Data(s.utf8)).map { String(format: "%02x", $0) }.joined()
+    }
+
+    static func digestHeader(www: String, method: String, uri: String, user: String, pass: String) -> String {
+        var p: [String: String] = [:]
+        let scanner = www.replacingOccurrences(of: "Digest ", with: "")
+        let re = try! NSRegularExpression(pattern: "(\\w+)=(\"[^\"]*\"|[^,]+)")
+        for m in re.matches(in: scanner, range: NSRange(scanner.startIndex..., in: scanner)) {
+            guard let kr = Range(m.range(at: 1), in: scanner),
+                  let vr = Range(m.range(at: 2), in: scanner) else { continue }
+            let k = String(scanner[kr])
+            var v = String(scanner[vr]).trimmingCharacters(in: .whitespaces)
+            if v.hasPrefix("\"") && v.hasSuffix("\"") { v = String(v.dropFirst().dropLast()) }
+            p[k] = v
+        }
+        let realm = p["realm"] ?? ""
+        let nonce = p["nonce"] ?? ""
+        let qop = p["qop"]
+        let ha1 = md5("\(user):\(realm):\(pass)")
+        let ha2 = md5("\(method):\(uri)")
+        let cnonce = String((0..<16).map { _ in "0123456789abcdef".randomElement()! })
+        let nc = "00000001"
+        let response: String
+        if let qop = qop, qop.contains("auth") {
+            response = md5("\(ha1):\(nonce):\(nc):\(cnonce):auth:\(ha2)")
+        } else {
+            response = md5("\(ha1):\(nonce):\(ha2)")
+        }
+        var h = "Digest username=\"\(user)\", realm=\"\(realm)\", nonce=\"\(nonce)\", uri=\"\(uri)\", response=\"\(response)\""
+        if let qop = qop, qop.contains("auth") { h += ", qop=auth, nc=\(nc), cnonce=\"\(cnonce)\"" }
+        if let opaque = p["opaque"] { h += ", opaque=\"\(opaque)\"" }
+        if let algo = p["algorithm"] { h += ", algorithm=\(algo)" }
+        return h
     }
 
     private func json(_ path: String) async throws -> [String: Any] {
@@ -179,15 +240,8 @@ final class PhilipsClient: NSObject, URLSessionDelegate, @unchecked Sendable {
                 completionHandler(.performDefaultHandling, nil)
             }
         } else if method == NSURLAuthenticationMethodHTTPDigest {
-            if challenge.previousFailureCount > 0 {
-                completionHandler(.cancelAuthenticationChallenge, nil); return
-            }
-            if let user = authUser, let pass = authPass {
-                completionHandler(.useCredential,
-                                  URLCredential(user: user, password: pass, persistence: .forSession))
-            } else {
-                completionHandler(.performDefaultHandling, nil)
-            }
+            // We compute Digest manually in request(); let URLSession return the raw 401.
+            completionHandler(.performDefaultHandling, nil)
         } else {
             completionHandler(.performDefaultHandling, nil)
         }

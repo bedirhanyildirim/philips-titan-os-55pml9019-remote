@@ -37,7 +37,7 @@ final class AppState: ObservableObject {
         }
     }
 
-    static func log(_ msg: String) {
+    nonisolated static func log(_ msg: String) {
         let url = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".philips-tv-remote/app.log")
         let line = "\(Date()) \(msg)\n"
