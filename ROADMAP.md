@@ -116,7 +116,12 @@ Sagemcom, SoftAtHome 1.7.19, Polish-only UI (no menu language option — only au
 - `operation=09&epg_id=…` (France-style tune by id) → invalid / hangs here. Use digits.
 - ⚠️ `wolSupport: "0"`. Sending Power (116) while it was in standby made it drop off the
   network entirely — only its own remote brings it back. Power from the app is untested.
-- Box HDMI-CEC is **off** (and TV EasyLink off), so the TV doesn't auto-switch to HDMI 1.
+- **Power sync works (2026-10-20):** powering the Orange box on also turned the TV on, and
+  powering it off turned the TV off — i.e. HDMI-CEC is effectively active between them
+  (box CEC was likely switched on during the settings session). Box stays reachable in
+  standby (`activeStandbyState: "1"`, `osdContext: MAIN_PROCESS`). Still to confirm: whether
+  this was via the app's Power button or the Orange remote, and whether the TV also
+  auto-switches to HDMI 1.
 
 ## What's blocked / dead ends (don't re-litigate)
 
@@ -204,8 +209,9 @@ open dist/PhilipsTVMenubar.app
       instead: PDF https://www.orange.pl/medias/omni/lp/b2c/tv/tv_mobilna/Lista-kana%C5%82%C3%B3w-TV-w-technologii-IPTV.pdf
       (257 channels: number, name, HD, category, package; logos matchable via iptv-org).
       Add a searchable logo list to the Orange tab that tunes with digit keys.
-- [ ] **Orange power** — test Power (116) on→standby keeps it on the network; if not,
-      hide power-off in the app.
+- [ ] **Orange power** — box now stays on the network in standby and power toggles the TV
+      too via CEC. Confirm the app's Power button does this reliably (the very first
+      Power press, from an older standby state, dropped the box off the network).
 - [ ] Verify guessed rc keycodes on the TV: Next 163, Previous 165, FF 208, Rewind 168, Info 358.
 - [ ] **Watchlist/favourites UI** via Titan `proxy` (`/v1/me/watchlists` POST/DELETE with
       `content_id`, `/v1/contents/{id}/deeplinkings` to open a show in its app).
