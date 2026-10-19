@@ -193,9 +193,11 @@ open dist/PhilipsTVMenubar.app
       goes over MQTT `keyboard {"opcode":0,"text":<char>}` — verify the payload (maybe whole
       string / needs a focused field); pointer still uses JointSpace `input/pointer` — check
       if Titan ignores it outside the browser.
-- [ ] **Orange channel list** — map channel ids (`playedMediaId`) ↔ names/logos/numbers
-      (Orange Polska EPG / Orange TV Go APIs) and add a searchable channel list that tunes
-      via digits. A research agent was started on this.
+- [ ] **Orange channel list** — no public id↔name source (Orange TV Go `gpapi2/live/channel/all`
+      needs login; Orange France's woopic API rejects PL). Use the official numbered list
+      instead: PDF https://www.orange.pl/medias/omni/lp/b2c/tv/tv_mobilna/Lista-kana%C5%82%C3%B3w-TV-w-technologii-IPTV.pdf
+      (257 channels: number, name, HD, category, package; logos matchable via iptv-org).
+      Add a searchable logo list to the Orange tab that tunes with digit keys.
 - [ ] **Orange power** — test Power (116) on→standby keeps it on the network; if not,
       hide power-off in the app.
 - [ ] Verify guessed rc keycodes on the TV: Next 163, Previous 165, FF 208, Rewind 168, Info 358.
