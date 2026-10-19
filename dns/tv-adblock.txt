@@ -1,0 +1,36 @@
+# Smart-TV ad / telemetry blocklist for Philips Titan OS
+# Format: one domain per line (subdomains are matched automatically).
+# Lines starting with # are comments.
+#
+# Used by sinkhole.py (NXDOMAINs these) and suitable for NextDNS / AdGuard
+# Home / Pi-hole custom blocklists. Run sinkhole.py to discover the exact
+# subdomains YOUR TV contacts, then add them here.
+
+# --- Titan Ads ad server: Equativ (formerly Smart AdServer) ---
+smartadserver.com
+sascdn.com
+equativ.com
+
+# --- Recommendation / ACR engine used by Titan OS ---
+thinkanalytics.com
+
+# --- Philips / NetTV legacy ad + portal endpoints ---
+ad.nettvservices.com
+legacyportal.nettvservices.com
+nettv.corio.com
+
+# --- Generic CTV ad exchanges commonly hit by smart-TV home screens ---
+doubleclick.net
+googlesyndication.com
+pubads.g.doubleclick.net
+googleadservices.com
+adservice.google.com
+amazon-adsystem.com
+scorecardresearch.com
+
+# --- Candidates to confirm with sinkhole.py before blocking ---
+# (do NOT blanket-block titanos.tv — it also serves the app store / updates)
+# ad.titanos.tv
+# ads.titanos.tv
+# analytics.titanos.tv
+# telemetry.titanos.tv

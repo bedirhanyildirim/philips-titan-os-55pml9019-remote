@@ -227,6 +227,23 @@ class PhilipsTV:
     def current_activity(self) -> dict:
         return self._get("activities/current")
 
+    # -- keyboard & pointer (great for the TV browser) --
+    def text_entry(self, text: str):
+        """Type text into the currently focused on-screen field."""
+        return self._post("input/textentry", {"textentry": text})
+
+    def pointer_move(self, dx: int, dy: int):
+        """Move the on-screen cursor by a relative delta (browser/pointer mode)."""
+        return self._post("input/pointer", {"x": int(dx), "y": int(dy)})
+
+    def click(self):
+        """Primary click == OK/Confirm."""
+        return self.send_key("Confirm")
+
+    def open_source_menu(self):
+        """Titan OS blocks /sources; open the TV's input menu and navigate with the d-pad."""
+        return self.send_key("Source")
+
     # -- ambilight --
     def ambilight_power(self, on: bool = True):
         return self._post("ambilight/power", {"power": "On" if on else "Off"})
