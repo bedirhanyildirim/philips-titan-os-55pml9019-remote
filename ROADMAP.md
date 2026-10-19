@@ -120,8 +120,8 @@ Sagemcom, SoftAtHome 1.7.19, Polish-only UI (no menu language option — only au
   powering it off turned the TV off — the user enabled HDMI-CEC on the box
   (Moje konto → Ustawienia → HDMI-CEC → CEC włączony). Box stays reachable in
   standby (`activeStandbyState: "1"`, `osdContext: MAIN_PROCESS`). This was done with the
-  **app's Orange Power button** (verified by the user). Still to confirm: whether the TV
-  also auto-switches to HDMI 1 when the box powers on.
+  **app's Orange Power button** (verified by the user). Powering the box on also
+  switches the TV to HDMI 1 and live TV (TVP1) comes up — verified.
 
 ## What's blocked / dead ends (don't re-litigate)
 
@@ -212,8 +212,9 @@ open dist/PhilipsTVMenubar.app
 - [x] **Orange power** — the app's Power button toggles the box and, via CEC, the TV; the box
       stays on the network in standby. (The very first press, before CEC was on, dropped the
       box off the network — watch for it.)
-- [ ] Check the box powering on also switches the TV to HDMI 1; if so, make Orange Power
-      the one-tap "Watch Orange" action.
+- [x] Box power-on switches the TV to HDMI 1 (CEC) — verified.
+- [ ] UI: make Orange Power the one-tap "Watch Orange" (on Home + Sources); the
+      "Show on TV (HDMI 1)" drawer macro is then only needed when the box is already on.
 - [ ] Verify guessed rc keycodes on the TV: Next 163, Previous 165, FF 208, Rewind 168, Info 358.
 - [ ] **Watchlist/favourites UI** via Titan `proxy` (`/v1/me/watchlists` POST/DELETE with
       `content_id`, `/v1/contents/{id}/deeplinkings` to open a show in its app).
