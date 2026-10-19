@@ -9,7 +9,7 @@ A native **macOS menu bar app** (SwiftUI) to control a **Philips Titan OS TV**
 over the local network — apps, sources, remote, Ambilight — plus the **Orange TV box**
 on HDMI 1, a Python reference client and DNS ad-blocking tools.
 
-Repo: https://github.com/bedirhanyildirim/philips_tv
+Repo: https://github.com/bedirhanyildirim/philips-titan-os-55pml9019-remote
 
 ## The hardware (this specific setup)
 
@@ -153,7 +153,7 @@ Sagemcom, SoftAtHome 1.7.19, Polish-only UI (no menu language option — only au
 ## Project layout
 
 ```
-philips_tv/
+philips-titan-os-55pml9019-remote/
 ├── ROADMAP.md              ← this file
 ├── README.md
 ├── app/                    ← native SwiftUI menu bar app (PRIMARY)
@@ -175,8 +175,8 @@ philips_tv/
 ## Build & run (per Mac)
 
 ```bash
-git clone https://github.com/bedirhanyildirim/philips_tv.git
-cd philips_tv/app
+git clone https://github.com/bedirhanyildirim/philips-titan-os-55pml9019-remote.git
+cd philips-titan-os-55pml9019-remote/app
 ./make-signing-cert.sh      # once — stable identity so Local Network perm sticks
 ./build.sh
 open dist/PhilipsTVMenubar.app

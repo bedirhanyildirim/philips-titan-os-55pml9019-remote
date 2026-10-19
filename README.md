@@ -1,4 +1,4 @@
-# Philips TV Menubar
+# Philips Titan OS Remote for macOS (55PML9019 / PML9019)
 
 A native **macOS menu bar** remote for **Philips Titan OS** TVs — launch any TV app
 (YouTube, Netflix, Disney+, HBO Max, …), switch HDMI sources, drive Ambilight, and
@@ -66,8 +66,8 @@ The box has no Wake-on-LAN — if it drops off the network, wake it with its own
 ## Install (macOS app)
 
 ```bash
-git clone https://github.com/bedirhanyildirim/philips_tv.git
-cd philips_tv/app
+git clone https://github.com/bedirhanyildirim/philips-titan-os-55pml9019-remote.git
+cd philips-titan-os-55pml9019-remote/app
 ./make-signing-cert.sh      # once — stable identity so the Local Network permission sticks
 ./build.sh
 open dist/PhilipsTVMenubar.app
@@ -95,7 +95,7 @@ python3 titan_pair.py --launch disney # launch one
 ## Project layout
 
 ```
-philips_tv/
+philips-titan-os-55pml9019-remote/
 ├── app/                          # SwiftUI menu bar app (primary)
 │   ├── build.sh, make-signing-cert.sh, Package.swift, Resources/Info.plist
 │   └── Sources/PhilipsTVMenubar/
