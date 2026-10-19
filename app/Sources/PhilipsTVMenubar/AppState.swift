@@ -24,7 +24,7 @@ final class AppState: ObservableObject {
     }
 
     func refresh() async {
-        guard let c = client else { return }
+        guard let c = client else { AppState.log("refresh: no client"); return }
         do {
             let state = try await c.powerState()
             isOn = (state == "On")
@@ -33,6 +33,20 @@ final class AppState: ObservableObject {
             statusMessage = ""
         } catch {
             statusMessage = "Bağlanılamadı"
+            AppState.log("refresh ERROR: \(error)")
+        }
+    }
+
+    static func log(_ msg: String) {
+        let url = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".philips-tv-remote/app.log")
+        let line = "\(Date()) \(msg)\n"
+        if let data = line.data(using: .utf8) {
+            if let h = try? FileHandle(forWritingTo: url) {
+                h.seekToEndOfFile(); h.write(data); try? h.close()
+            } else {
+                try? data.write(to: url)
+            }
         }
     }
 

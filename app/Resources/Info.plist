@@ -20,6 +20,8 @@
     <string>13.0</string>
     <key>LSUIElement</key>
     <true/>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>Philips TV, aynı ağdaki televizyonunuzu kontrol etmek için yerel ağa erişir.</string>
     <key>NSHighResolutionCapable</key>
     <true/>
 </dict>

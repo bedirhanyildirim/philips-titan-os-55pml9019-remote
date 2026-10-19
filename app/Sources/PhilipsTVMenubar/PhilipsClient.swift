@@ -156,8 +156,21 @@ final class PhilipsClient: NSObject, URLSessionDelegate, @unchecked Sendable {
 
     // MARK: - URLSessionDelegate (self-signed TLS + HTTP Digest)
 
+    // Task-level: HTTP Digest challenges are delivered here.
+    func urlSession(_ session: URLSession, task: URLSessionTask,
+                    didReceive challenge: URLAuthenticationChallenge,
+                    completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
+        handle(challenge, completionHandler)
+    }
+
+    // Session-level: server-trust (self-signed cert) is delivered here.
     func urlSession(_ session: URLSession, didReceive challenge: URLAuthenticationChallenge,
                     completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
+        handle(challenge, completionHandler)
+    }
+
+    private func handle(_ challenge: URLAuthenticationChallenge,
+                        _ completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
         let method = challenge.protectionSpace.authenticationMethod
         if method == NSURLAuthenticationMethodServerTrust {
             if let trust = challenge.protectionSpace.serverTrust {
