@@ -1,70 +1,78 @@
-# Philips Titan OS Remote for macOS (55PML9019 / PML9019)
+# Philips Titan OS Remote & API — macOS menu bar app (55PML9019 / PML9019)
 
-A native **macOS menu bar** remote for **Philips Titan OS** TVs — launch any TV app
-(YouTube, Netflix, Disney+, HBO Max, …), switch HDMI sources, drive Ambilight, and
-control an **Orange TV box** on the same network.
+**Control a Philips Titan OS TV from your Mac** — launch any app (Netflix, Disney+, HBO Max,
+YouTube, Prime Video…), switch HDMI sources, turn Ambilight on/off, control YouTube playback,
+wake the TV with Wake-on-LAN, and drive an **Orange TV box** — all over the local network.
 
-> Tested on a **Philips 55PML9019/12** (Titan OS, JointSpace API v6.1, Poland) with an
-> **Orange Polska** Sagemcom decoder on HDMI 1 and a Philips soundbar on HDMI 2 (eARC).
+Also a **developer reference for the Philips Titan OS local API**: Titan OS blocks the
+classic JointSpace app/source endpoints (`403 Forbidden`), so this project documents the
+channels that *do* work — the **Titan OS MQTT** protocol (reverse-engineered from the official
+Titan OS Mobile app), JointSpace v6, DIAL and the YouTube Lounge API.
+👉 **[docs/TITAN_OS_API.md](docs/TITAN_OS_API.md)**
 
-Inspired by [LGwebOS-menubar](https://github.com/gabrielgreco1/LGwebOS-menubar).
+> Tested on a **Philips 55PML9019/12 "The Xtra"** (Titan OS, JointSpace 6.1, firmware
+> 248.010.000.121, Poland) with an **Orange Polska** Sagemcom decoder on HDMI 1 and a
+> **Philips TAB6309** soundbar on HDMI 2 (eARC). Other Philips Titan OS TVs (2024+) should
+> behave the same — reports welcome.
 
 ## Features
 
 | Tab | What it does |
 |---|---|
-| 🏠 **Home** | Live "now on" (home / app / HDMI / Orange channel), YouTube now-playing card with controls, volume, favourite apps (Home first), quick sources |
+| 🏠 **Home** | Live **"now on"** (home screen / app / HDMI / Orange channel), **YouTube now-playing** card with play/pause/seek/next, soundbar volume, favourite apps (Home always first), quick sources |
 | 🎮 **Remote** | D-pad, OK/Home/Back/Menu/Info, media keys, channel ±, pointer trackpad, keyboard |
-| ▦ **Apps** | Every app installed on the TV, with icons, search and ★ favourites — one click launches it |
+| ▦ **Apps** | Every app installed on the TV (icons, search, ★ favourites) — one click launches it |
 | ⌁ **Sources** | HDMI 1–4, Satellite, Antenna, Streaming, USB, Network |
-| 📦 **Orange TV** | Remote for the Orange decoder: power, d-pad, channels, digits, VOD, record |
-| ✨ **Ambilight** | Follow video / follow audio / fixed colour presets, off |
-| ⚙️ **Settings** | Connection status, re-pairing, refresh, quit |
+| 📦 **Orange TV** | Remote for an Orange Polska / Livebox decoder: power, d-pad, channels, digits |
+| ✨ **Ambilight** | Follow video / follow audio / colour presets, and a **working Off** on Titan OS |
+| ⚙️ **Settings** | Connection status, pairing, refresh |
 
-The power button wakes the TV with **Wake-on-LAN** when it's off the network (deep standby),
-and the Orange box's power button switches the TV on/off with it over HDMI-CEC.
+- **Power:** wakes the TV with **Wake-on-LAN** from deep standby; the Orange box's power
+  button turns the TV on/off with it over HDMI-CEC.
+- English UI, dark theme, lives in the macOS menu bar.
 
-## How it works — three control channels
+## FAQ — Philips Titan OS
 
-Titan OS locks down the classic JointSpace app/source endpoints
-(`/6/applications`, `/6/sources` → **403**). The app combines three channels:
+**Why does `/6/applications` return 403 on my Philips Titan OS TV?**
+Titan OS locks down JointSpace's app and source endpoints (`/6/applications`, `/6/sources`,
+`/6/activities/launch`). Launch apps through the Titan OS MQTT `deeplink` topic instead →
+[docs](docs/TITAN_OS_API.md#launch-an-app).
 
-### 1. JointSpace v6 (`https://<tv>:1926/6/…`) — Ambilight, pointer, status
-PIN pairing (`/6/pair/request` → PIN on screen → HMAC-SHA1 signature → `/6/pair/grant`),
-then HTTP **Digest** auth. Shared key and signature scheme from
-[`ha-philipsjs`](https://github.com/danielperna84/ha-philipsjs) (the old `pylips` key
-doesn't work on Titan OS). URLSession's built-in digest fails against this TV, so the
-`Authorization` header is computed manually.
+**How do I launch Netflix / Disney+ / HBO Max / YouTube on a Titan OS TV programmatically?**
+Pair with the TV's MQTT server on port 8883 (4-digit PIN) and publish
+`deeplink {"app_code":"disney","url":"disneyplus"}`. YouTube, Netflix and Prime also work
+via DIAL on port 56789 with the right `Origin` header.
 
-> ⚠️ Don't call list-dumping endpoints such as `/6/channeldb/tv/channelLists/all` —
-> on this TV it hung the JointSpace server until the TV was unplugged.
+**How do I turn Ambilight off via the API on Titan OS?**
+`ambilight/power Off` is ignored. Set the settings node "Ambilight style" (300) to 310 with
+`POST /6/menuitems/settings/update` → [docs](docs/TITAN_OS_API.md#turning-ambilight-off-the-only-way-that-works-on-titan-os).
 
-### 2. Titan OS MQTT (`mqtts://<tv>:8883`) — apps, remote keys, sources
-The protocol of the official **Titan OS Mobile** app, reverse-engineered from
-`tv.titanos.eos.mobile`:
+**How do I switch HDMI input on a Philips Titan OS TV?**
+There's no source API; walk the Sources drawer with MQTT `rc` keys → [docs](docs/TITAN_OS_API.md#selecting-hdmi--sources).
 
-- **TLS** pinned to the "Titanos Root CA" bundled with the mobile app; no client cert.
-- **Pairing**: `pairing/start {"type":"mobile"}` → 4-digit PIN on the TV →
-  `pairing/finish {"username","challenge_result": hex(HMAC-SHA256(PIN, challenge))}` →
-  MQTT username/password.
-- **Launch any app**: `deeplink {"app_code":"disney","url":"disneyplus"}` — codes and
-  urls come from the TV's own list (`proxy` → `/v1/me/user_apps`).
-- **Remote keys**: `rc {"key_code":N}` (Linux input keycodes, e.g. Home 102, OK 352).
-  Keeps working even when JointSpace hangs.
-- **Sources**: there is no source API, so the app opens the Sources drawer and walks it:
-  `Home → Sources(394) → Down×12 → Up×n → OK` (the list doesn't wrap, so focus is
-  pinned to an end first). Screen mirroring is never selected — it drops the TV off
-  the network.
+**Why does `powerstate` say "On" when the TV is off?**
+Titan keeps JointSpace running in quick standby; in deep standby the TV leaves the network.
+Use reachability + Wake-on-LAN.
 
-### 3. DIAL (`http://<tv>:56789/apps/<Name>`) — fallback without Titan pairing
-YouTube, Netflix, Prime Video (`AmazonInstantVideo`) and YouTube Kids. The TV checks a
-per-app `Origin` header (e.g. `https://www.youtube.com`) — without it, 403.
+**Does it work with Home Assistant?**
+This is a standalone Mac app, but the protocol notes apply directly to Home Assistant's
+`philips_js` / ha-philipsjs and to openHAB/Homey bindings.
 
-### Orange TV box (`http://<box>:8080/remoteControl/cmd`)
-Orange Polska's Sagemcom/SoftAtHome decoder speaks the same local API as Orange
-France's Livebox boxes, no auth: `operation=10` (status) and
-`operation=01&key=<keycode>&mode=0` (key press; digits 512–521 tune by number).
-The box has no Wake-on-LAN — if it drops off the network, wake it with its own remote.
+**Spotify on Titan OS?**
+Not in the Titan catalog yet (expected late 2026). The TV has a DTS Play-Fi receiver.
+
+## How it works — the control channels
+
+| Channel | Used for |
+|---|---|
+| **Titan OS MQTT** `mqtts://<tv>:8883` | launch any app, remote keys, keyboard, installed-app list, home-screen state, source macro |
+| **JointSpace v6** `https://<tv>:1926/6/` | Ambilight (via settings menu nodes), pointer, context, power state |
+| **DIAL** `http://<tv>:56789/apps/` | YouTube/Netflix/Prime launch without pairing, app running state |
+| **YouTube Lounge API** | now playing, play/pause/seek/next on the TV's YouTube app |
+| **Wake-on-LAN** | power on from deep standby |
+| **Orange decoder** `http://<box>:8080/remoteControl/cmd` | status, keys, tune by number (same API as Orange France Livebox) |
+
+Full protocol details, payloads, key codes and gotchas: **[docs/TITAN_OS_API.md](docs/TITAN_OS_API.md)**.
 
 ## Install (macOS app)
 
@@ -82,8 +90,8 @@ Requires macOS 13+ and the Xcode Command Line Tools. On first launch:
 2. Pair the remote: enter the TV's IP, then the PIN shown on the TV.
 3. Pair Titan OS (Apps tab → *Unlock all apps*): enter the second PIN.
 
-Credentials live in `~/.philips-tv-remote/` (`credentials.json`, `titan_mqtt.json`, mode 600)
-and are never committed. To start at login: System Settings → General → Login Items.
+Credentials live in `~/.philips-tv-remote/` (mode 600) and are never committed.
+To start at login: System Settings → General → Login Items.
 
 ## Python reference client
 
@@ -99,32 +107,29 @@ python3 titan_pair.py --launch disney # launch one
 
 ```
 philips-titan-os-55pml9019-remote/
-├── app/                          # SwiftUI menu bar app (primary)
-│   ├── build.sh, make-signing-cert.sh, Package.swift, Resources/Info.plist
-│   └── Sources/PhilipsTVMenubar/
-│       ├── PhilipsClient.swift   # JointSpace v6 (pairing, manual digest, keys, Ambilight, DIAL)
-│       ├── TitanClient.swift     # Titan OS MQTT v5 client (pairing, deeplink, rc, proxy)
-│       ├── OrangeClient.swift    # Orange TV box HTTP API
-│       ├── AppState.swift        # state, launching, source macro, Orange
-│       ├── PhilipsTVApp.swift    # MenuBarExtra, header, tab bar, footer
-│       ├── Theme.swift           # cards, buttons, colours
-│       └── HomeTab / RemoteTab / AppsTab / SourcesTab / OrangeTab / AmbilightView / SettingsTab
-├── philipstv/                    # Python reference client
-│   ├── client.py                 # JointSpace v6
-│   ├── titan.py, titan_ca.crt    # Titan OS MQTT
-│   ├── orange.py                 # Orange TV box
-│   └── menubar.py                # legacy rumps menu bar
-├── pair.py, titan_pair.py, run.py
-├── dns/                          # DNS ad-blocking for Titan Ads
-└── ROADMAP.md                    # status, hard-won facts, next steps
+├── app/Sources/PhilipsTVMenubar/     # SwiftUI menu bar app
+│   ├── TitanClient.swift             # Titan OS MQTT v5 client (Network.framework, no deps)
+│   ├── PhilipsClient.swift           # JointSpace v6 (manual Digest auth), Ambilight, DIAL
+│   ├── YouTubeLounge.swift           # YouTube Lounge API client
+│   ├── OrangeClient.swift            # Orange TV box HTTP API
+│   ├── WakeOnLAN.swift               # magic packet
+│   ├── AppState.swift                # state, polling, "now on", source macro
+│   └── *Tab.swift, AmbilightView, YouTubeCard, Theme, PhilipsTVApp
+├── philipstv/                        # Python: client.py (JointSpace), titan.py (MQTT), orange.py
+├── docs/TITAN_OS_API.md              # protocol reference
+├── dns/                              # DNS blocking for Titan Ads
+└── ROADMAP.md                        # status, findings, next steps
 ```
 
 ## Credits / references
 
 - [ha-philipsjs](https://github.com/danielperna84/ha-philipsjs) — JointSpace pairing/signature
+- [Home Assistant core #156776](https://github.com/home-assistant/core/issues/156776) — Ambilight off on Titan OS
 - [pylips](https://github.com/eslavnov/pylips) — JointSpace command reference
 - Titan OS Mobile app — MQTT protocol (reverse-engineered for interoperability)
 - [LGwebOS-menubar](https://github.com/gabrielgreco1/LGwebOS-menubar) — UI inspiration
+
+Not affiliated with Philips, TP Vision, Titan OS, Orange or Google.
 
 ## License
 
