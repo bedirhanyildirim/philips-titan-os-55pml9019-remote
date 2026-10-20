@@ -1,5 +1,7 @@
 # Philips Titan OS Remote & API — macOS menu bar app (55PML9019 / PML9019)
 
+![Philips Titan OS remote & local API — wall-mounted TV with Ambilight](docs/social-preview.png)
+
 **Control a Philips Titan OS TV from your Mac** — launch any app (Netflix, Disney+, HBO Max,
 YouTube, Prime Video…), switch HDMI sources, turn Ambilight on/off, control YouTube playback,
 wake the TV with Wake-on-LAN, and drive an **Orange TV box** — all over the local network.
