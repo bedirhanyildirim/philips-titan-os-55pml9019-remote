@@ -8,6 +8,7 @@ struct HomeTab: View {
         VStack(spacing: 10) {
             TVPreview()
             nowOn
+            if state.isOn, let np = state.ytNow { YouTubeCard(np: np) }
             VolumeCard()
             favoritesCard
             sourceCard
@@ -19,8 +20,12 @@ struct HomeTab: View {
             Circle().fill(state.isOn ? Theme.accent : Color.gray).frame(width: 5, height: 5)
             Text("NOW ON").font(.system(size: 9, weight: .bold)).tracking(1.2).foregroundStyle(.secondary)
             Spacer()
-            Text(state.isOn ? (state.lastLaunched?.name ?? "Titan OS") : "Standby")
-                .font(.system(size: 11)).foregroundStyle(.secondary)
+            if state.isOn, let n = state.nowOn {
+                Text([n.title, n.detail].compactMap { $0 }.joined(separator: " · "))
+                    .font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+            } else {
+                Text(state.isOn ? "…" : "Standby").font(.system(size: 11)).foregroundStyle(.secondary)
+            }
         }
         .padding(.horizontal, 4)
     }
@@ -33,6 +38,7 @@ struct HomeTab: View {
                 Button {
                     state.key("Home")
                     state.lastLaunched = nil
+                    state.nowOn = AppState.NowOn(title: "Home screen", icon: "house.fill")
                 } label: {
                     VStack(spacing: 5) {
                         Image(systemName: "house.fill").font(.system(size: 17))
@@ -104,13 +110,15 @@ struct TVPreview: View {
                     .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.15), lineWidth: 1.5))
                     .padding(.horizontal, 22)
                 VStack(spacing: 4) {
-                    if let app = state.lastLaunched, state.isOn {
+                    if state.isOn, let app = state.nowOn?.app {
                         AppIcon(app: app, size: 30)
+                    } else if state.isOn, let n = state.nowOn {
+                        Image(systemName: n.icon).font(.system(size: 20)).foregroundStyle(Theme.accent)
                     } else {
                         Text("PHILIPS").font(.system(size: 11, weight: .heavy)).tracking(2)
                             .foregroundStyle(state.isOn ? Theme.accent : .secondary)
                     }
-                    Text(state.isOn ? "TV on" : "TV off")
+                    Text(state.isOn ? (state.nowOn?.title ?? "TV on") : "TV off")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(state.isOn ? .white : .secondary)
                 }

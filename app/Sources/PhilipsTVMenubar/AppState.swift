@@ -7,7 +7,6 @@ final class AppState: ObservableObject {
     @Published var needsPairing: Bool
     @Published var isOn: Bool = false
     @Published var modelName: String = ""
-    @Published var currentApp: String = ""
     @Published var statusMessage: String = ""
 
     // pairing flow
@@ -25,6 +24,28 @@ final class AppState: ObservableObject {
 
     // UI
     @Published var lastLaunched: TitanApp?
+    @Published var nowOn: NowOn?
+
+    /// What's on screen right now, from TV context + Titan `channels/state` + DIAL states.
+    struct NowOn: Equatable {
+        var title: String
+        var detail: String? = nil
+        var icon: String = "tv"
+        var app: TitanApp? = nil
+    }
+    private var prevDial: [String: String] = [:]
+
+    // YouTube app on the TV (Lounge API — see YouTubeLounge.swift)
+    let youtube = YouTubeLounge(tvHost: PhilipsClient.loadSaved()?.host ?? "192.168.0.45", deviceName: "Mac")
+    @Published var ytNow: YouTubeLounge.NowPlaying?
+
+    func yt(_ label: String, _ op: @escaping (YouTubeLounge) async throws -> Void) {
+        let y = youtube
+        Task {
+            do { try await op(y) }
+            catch { AppState.log("youtube \(label) ERROR: \(error)"); statusMessage = "YouTube \(label) failed" }
+        }
+    }
     @Published var glow: Color = Theme.accent  // last Ambilight colour, for the TV preview
     @Published var favorites: [String] =
         UserDefaults.standard.stringArray(forKey: "favorites") ?? ["youtube", "netflix", "disney", "max"] {
@@ -63,6 +84,16 @@ final class AppState: ObservableObject {
             if statusMessage.isEmpty { break }
         }
         await loadApps()
+        youtube.onUpdate = { [weak self] np in Task { @MainActor in self?.ytNow = np } }
+        youtube.start()                                // idles while YouTube isn't open
+        // Live "now on" — every 8 s while the TV is on (Titan's JointSpace HTTPS server
+        // wedges under rapid requests; keep polling light).
+        Task {
+            while !Task.isCancelled {
+                if isOn { await refreshNowOn() }
+                try? await Task.sleep(nanoseconds: 8_000_000_000)
+            }
+        }
         // Keep power state fresh: the TV can be switched off by its remote or by the
         // Orange box over HDMI-CEC, and nothing notifies us.
         while !Task.isCancelled {
@@ -77,8 +108,7 @@ final class AppState: ObservableObject {
         do {
             let state = try await c.powerState()
             isOn = (state == "On")
-            if let name = try? await c.systemInfo()["name"] as? String { modelName = name }
-            if let act = try? await c.currentActivity() { currentApp = act }
+            if modelName.isEmpty, let name = try? await c.systemInfo()["name"] as? String { modelName = name }
             statusMessage = ""
         } catch {
             // In deep standby the TV drops off the network entirely ("Host is down").
@@ -151,6 +181,61 @@ final class AppState: ObservableObject {
                 statusMessage = "\(label) failed"
             }
         }
+    }
+
+    // MARK: now on
+
+    func refreshNowOn() async {
+        guard isOn, let c = client else { nowOn = nil; return }
+        let level1 = (try? await c.context()) ?? "NetTv"
+        if level1 == "WatchExtension" {
+            if orangeReachable, let o = orangeStatus, o.isOn {
+                nowOn = NowOn(title: "Orange TV", detail: o.channelId.map { "HDMI 1 · channel #\($0)" } ?? "HDMI 1",
+                              icon: "tv.and.mediabox")
+            } else {
+                nowOn = NowOn(title: "HDMI input", detail: currentSource?.name, icon: "cable.connector")
+            }
+            lastLaunched = nil
+            return
+        }
+        if level1.hasPrefix("Watch") {                 // WatchSatellite, WatchTv, …
+            let src = String(level1.dropFirst(5))
+            nowOn = NowOn(title: src == "Satellite" ? "Satellite TV" : "Live TV",
+                          detail: src == "Satellite" ? nil : src, icon: "antenna.radiowaves.left.and.right")
+            lastLaunched = nil
+            return
+        }
+        // NetTv: home screen or an app. Titan says reliably whether the launcher is up.
+        if let creds = titan,
+           let st = (try? await TitanClient.retained(creds, "channels/state"))??["state"] as? String,
+           st == "launcher" {
+            nowOn = NowOn(title: "Home screen", icon: "house.fill")
+            lastLaunched = nil
+            return
+        }
+        // Which app? DIAL knows YouTube/Netflix/Prime; a stopped→running flip means it
+        // was just opened (e.g. from the TV remote).
+        var started: String?
+        var running = Set<String>()
+        for (code, (name, _)) in Self.dial {
+            guard let st = await c.dialState(name) else { continue }
+            if st == "running" {
+                running.insert(code)
+                if prevDial[code] != nil, prevDial[code] != "running" { started = code }
+            }
+            prevDial[code] = st
+        }
+        var app = lastLaunched
+        if let code = started ?? (app == nil && running.count == 1 ? running.first : nil) {
+            app = tvApps.first { $0.code == code }
+        } else if let a = app, Self.dial[a.code] != nil, !running.contains(a.code) {
+            app = nil                                  // the DIAL app we launched isn't running any more
+        }
+        lastLaunched = app
+        nowOn = app.map { a in
+            NowOn(title: a.name, detail: a.code == "youtube" ? ytNow?.title : nil, icon: "play.tv", app: a)
+        }
+            ?? NowOn(title: "An app", detail: "Opened from the TV remote", icon: "app")
     }
 
     // MARK: power
@@ -277,6 +362,7 @@ final class AppState: ObservableObject {
                 }
                 statusMessage = ""
                 lastLaunched = app
+                nowOn = NowOn(title: app.name, icon: "play.tv", app: app)
             } catch {
                 AppState.log("launch \(app.code) ERROR: \(error)")
                 statusMessage = "Couldn't open \(app.name)"

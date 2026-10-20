@@ -207,10 +207,20 @@ final class PhilipsClient: NSObject, URLSessionDelegate, @unchecked Sendable {
     func textEntry(_ text: String) async throws { try await request("input/textentry", method: "POST", body: ["textentry": text]) }
     func pointerMove(_ dx: Int, _ dy: Int) async throws { try await request("input/pointer", method: "POST", body: ["x": dx, "y": dy]) }
     func currentActivity() async throws -> String { (try await json("activities/current"))["id"] as? String ?? "" }
+    /// `level1`: NetTv (home/apps), WatchExtension (any HDMI), WatchSatellite, …
+    func context() async throws -> String { (try await json("context"))["level1"] as? String ?? "" }
 
-    /// `styleName: OFF` is accepted but doesn't turn the lights off; power does.
-    func setAmbilightPower(_ on: Bool) async throws {
-        try await request("ambilight/power", method: "POST", body: ["power": on ? "On" : "Off"])
+    /// Ambilight on Titan OS is switched through the settings menu node "Ambilight style"
+    /// (300): 310 = Off, 320 = Follow video, 330 = Follow audio, 340 = Follow colour.
+    /// `ambilight/power Off`, `styleName OFF` and the AmbilightOnOff key are accepted but
+    /// ignored on Titan (HA core #156776; same call as the official Philips app).
+    enum AmbilightStyleNode: Int { case off = 310, video = 320, audio = 330, colour = 340 }
+
+    func setAmbilightStyle(_ node: AmbilightStyleNode) async throws {
+        let value: [String: Any] = ["Nodeid": 300, "Controllable": true, "Available": true,
+                                    "string_id": "MLM_PHM_KEY_MAIN_AMBILIGHT_STYLE",
+                                    "data": ["activenode_id": node.rawValue]]
+        try await request("menuitems/settings/update", method: "POST", body: ["values": [["value": value]]])
     }
 
     func setAmbilight(style: String, menu: String? = nil, algorithm: String? = nil) async throws {
@@ -239,6 +249,17 @@ final class PhilipsClient: NSObject, URLSessionDelegate, @unchecked Sendable {
             AppState.log("HTTP \(code) DIAL \(app)")
             throw PhilipsError.launch("\(app): HTTP \(code)")
         }
+    }
+
+    /// DIAL app state: "running" / "stopped" (nil if unknown app or unreachable).
+    func dialState(_ app: String) async -> String? {
+        var req = URLRequest(url: URL(string: "http://\(host):56789/apps/\(app)")!)
+        req.timeoutInterval = 3
+        guard let (data, _) = try? await session.data(for: req) else { return nil }
+        let xml = String(decoding: data, as: UTF8.self)
+        guard let r = xml.range(of: "<state>"), let e = xml.range(of: "</state>", range: r.upperBound..<xml.endIndex)
+        else { return nil }
+        return String(xml[r.upperBound..<e.lowerBound])
     }
 
     // MARK: - URLSessionDelegate (self-signed TLS + HTTP Digest)

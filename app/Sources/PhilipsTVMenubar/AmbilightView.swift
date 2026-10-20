@@ -63,7 +63,7 @@ struct AmbilightView: View {
                     Spacer()
                     PillButton(title: "Off", tint: Color.red.opacity(0.35)) {
                         selected = "Off"; state.glow = .gray
-                        state.run("Ambilight") { try await $0.setAmbilightPower(false) }
+                        state.run("Ambilight") { try await $0.setAmbilightStyle(.off) }
                     }
                 }
             }
@@ -119,8 +119,13 @@ struct AmbilightView: View {
     }
 
     private func set(style: String, menu: String? = nil, algorithm: String? = nil) {
+        let node: PhilipsClient.AmbilightStyleNode =
+            style == "FOLLOW_AUDIO" ? .audio : style == "FOLLOW_COLOR" ? .colour : .video
         state.run("Ambilight") {
-            try await $0.setAmbilightPower(true)
+            // switch the menu style first (also turns Ambilight back on after Off),
+            // then pick the mode; spaced out — Titan's HTTPS server wedges on bursts
+            try await $0.setAmbilightStyle(node)
+            try await Task.sleep(nanoseconds: 1_500_000_000)
             try await $0.setAmbilight(style: style, menu: menu, algorithm: algorithm)
         }
     }

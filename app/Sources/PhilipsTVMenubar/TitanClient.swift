@@ -133,6 +133,25 @@ final class TitanClient: @unchecked Sendable {
         }
     }
 
+    /// Latest retained message on a topic (e.g. `channels/state`: {"state":"launcher"} on
+    /// the home screen, "inactive" when an app or another source is in front).
+    static func retained(_ creds: Credentials, _ topic: String) async throws -> [String: Any]? {
+        let c = TitanClient(host: creds.host)
+        try await c.open(user: creds.username, pass: creds.password)
+        defer { c.close() }
+        c.packetId &+= 1
+        let sub = Data([UInt8(c.packetId >> 8), UInt8(c.packetId & 0xFF)]) + Self.varint(0)
+            + Self.str(topic) + Data([0x00])
+        try await c.send(0x82, sub)
+        _ = try await c.withTimeout(4) { try await c.readPacket(type: 9) }
+        return try? await c.withTimeout(2.5) {
+            while true {
+                let (t, p) = try await c.readPublish()
+                if t == topic { return (try? JSONSerialization.jsonObject(with: p)) as? [String: Any] ?? [:] }
+            }
+        }
+    }
+
     /// Pairing step 1: TV shows a 4-digit PIN. Keeps the connection open for step 2.
     func startPairing() async throws {
         try await open(user: nil, pass: nil)

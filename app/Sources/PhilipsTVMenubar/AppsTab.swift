@@ -34,7 +34,7 @@ struct AppsTab: View {
 
     private func tile(_ app: TitanApp) -> some View {
         let fav = state.favorites.contains(app.code)
-        let current = state.lastLaunched?.code == app.code
+        let current = state.nowOn?.app?.code == app.code
         return Button { state.launch(app) } label: {
             VStack(spacing: 6) {
                 AppIcon(app: app, size: 42)

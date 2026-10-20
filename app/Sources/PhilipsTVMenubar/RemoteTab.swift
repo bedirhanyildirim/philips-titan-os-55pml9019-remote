@@ -7,6 +7,7 @@ struct RemoteTab: View {
     var body: some View {
         VStack(spacing: 10) {
             SectionLabel(text: "Remote")
+            if state.isOn, let np = state.ytNow { YouTubeCard(np: np) }
             Card {
                 VStack(spacing: 12) {
                     HStack(alignment: .center) {

@@ -13,7 +13,7 @@ Inspired by [LGwebOS-menubar](https://github.com/gabrielgreco1/LGwebOS-menubar).
 
 | Tab | What it does |
 |---|---|
-| 🏠 **Home** | TV preview with an Ambilight halo, volume (soundbar via HDMI-CEC), favourite apps (Home is always first), quick sources |
+| 🏠 **Home** | Live "now on" (home / app / HDMI / Orange channel), YouTube now-playing card with controls, volume, favourite apps (Home first), quick sources |
 | 🎮 **Remote** | D-pad, OK/Home/Back/Menu/Info, media keys, channel ±, pointer trackpad, keyboard |
 | ▦ **Apps** | Every app installed on the TV, with icons, search and ★ favourites — one click launches it |
 | ⌁ **Sources** | HDMI 1–4, Satellite, Antenna, Streaming, USB, Network |

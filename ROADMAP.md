@@ -191,9 +191,26 @@ open dist/PhilipsTVMenubar.app
 
 ## Roadmap (pick up here)
 
-- [ ] **Ambilight Off** — confirmed 2026-10-20: `POST ambilight/power Off` returns 200 and
-      GET reports "Off", but the lights stay on. Try `input/key AmbilightOnOff`, or
-      `ambilight/mode manual` + black `ambilight/cached`.
+- [x] **Ambilight Off** — fixed: Titan ignores `ambilight/power`, `styleName OFF` and the
+      AmbilightOnOff key. The official app sets menu node 300 "Ambilight style" →
+      `POST menuitems/settings/update {"values":[{"value":{"Nodeid":300,"Controllable":true,
+      "Available":true,"string_id":"MLM_PHM_KEY_MAIN_AMBILIGHT_STYLE","data":{"activenode_id":310}}}]}`
+      (310 Off, 320 Follow video, 330 Follow audio, 340 Follow colour, 360 Follow app), then
+      `currentconfiguration` for the mode. Verified on/off (HA core #156776). Note: Titan's
+      JointSpace HTTPS server wedges under bursts — keep ~1.5 s+ between calls.
+- [ ] **Spotify** (must do): not in the Titan catalog in any market (expected "later 2026" —
+      re-check `https://app.titanos.tv/v1/apps/spotify?market=pl&device=tv&firmware=x&model=55PML9019%2F12&locale=pl`;
+      then launch via MQTT deeplink). TV is not a Spotify Connect / AirPlay target (no mDNS).
+      Try both: (1) **DTS Play-Fi** on the TV (Settings → Play-Fi; Music page, Play-Fi port 10109):
+      install Philips "Wi-Fi Music"/DTS Play-Fi app on the iPhone, pick "Play-Fi TV" (Play-Fi
+      supports Spotify Connect); (2) **AirConnect** (github.com/philippe44/AirConnect, airupnp)
+      on the Mac to expose the TV's DLNA renderer as an AirPlay target (needs user OK to run it).
+      Fallback: Bluetooth to the TAB6309 soundbar.
+- [x] **YouTube control** — Lounge API (`YouTubeLounge.swift`): DIAL screenId → lounge token
+      → bind/long-poll; now playing + play/pause/seek verified. Never send `TYPE=terminate`
+      (it kicks the TV out of the video). next/previous/playVideo untested.
+- [x] **Live "now on"** — context level1 + MQTT `channels/state` + DIAL states (8 s poll).
+      Disney+/Max opened from the TV remote show as "An app".
 - [~] **Power state when the TV is off** — the app now polls every 15 s and shows "TV off"
       when the TV is unreachable (deep standby, e.g. after the Orange box turns it off via
       CEC: the TV drops off the network). Still open: in *quick* standby (TV remote off)
