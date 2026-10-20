@@ -84,6 +84,7 @@ final class AppState: ObservableObject {
             if statusMessage.isEmpty { break }
         }
         await loadApps()
+        await discoverOrange()
         youtube.onUpdate = { [weak self] np in Task { @MainActor in self?.ytNow = np } }
         youtube.start()                                // idles while YouTube isn't open
         // Live "now on" — every 8 s while the TV is on (Titan's JointSpace HTTPS server
@@ -267,11 +268,30 @@ final class AppState: ObservableObject {
 
     // MARK: Orange TV box (HDMI 1)
 
-    let orange = OrangeClient(host: UserDefaults.standard.string(forKey: "orangeHost") ?? OrangeClient.defaultHost)
+    /// nil = no Orange box on this network (all Orange UI is hidden).
+    @Published var orangeHost: String? = UserDefaults.standard.string(forKey: "orangeHost") {
+        didSet { UserDefaults.standard.set(orangeHost, forKey: "orangeHost") }
+    }
+    var orange: OrangeClient? { orangeHost.map(OrangeClient.init(host:)) }
     @Published var orangeStatus: OrangeClient.Status?
-    @Published var orangeReachable = true
+    @Published var orangeReachable = false
+    @Published var orangeScanning = false
+
+    /// SSDP scan. Keeps a previously found box even if it doesn't answer now (it may be in
+    /// deep standby); `forget` clears it.
+    func discoverOrange() async {
+        orangeScanning = true
+        if let ip = await OrangeClient.discover() { orangeHost = ip }
+        orangeScanning = false
+        await refreshOrange()
+    }
+
+    func forgetOrange() {
+        orangeHost = nil; orangeStatus = nil; orangeReachable = false
+    }
 
     func refreshOrange() async {
+        guard let orange = orange else { orangeStatus = nil; orangeReachable = false; return }
         do {
             orangeStatus = try await orange.status()
             orangeReachable = true
@@ -282,6 +302,7 @@ final class AppState: ObservableObject {
     }
 
     func orangeKey(_ code: Int) {
+        guard let orange = orange else { return }
         Task {
             do {
                 try await orange.press(code)

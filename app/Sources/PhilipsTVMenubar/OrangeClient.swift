@@ -1,6 +1,7 @@
 import Foundation
 
-/// Orange Polska TV decoder (Sagemcom, SoftAtHome middleware) on HDMI 1.
+/// Orange TV decoder (Orange Polska Sagemcom / SoftAtHome; same API as Orange France
+/// Livebox decoders). Optional: found by SSDP at startup; the UI only shows it when found.
 ///
 /// The box exposes the same local HTTP remote API as Orange France's Livebox decoders
 /// (advertised over SSDP as urn:schemas-orange-com:service:X_OrangeSTBRemoteControl:1),
@@ -13,7 +14,51 @@ import Foundation
 struct OrangeClient: Sendable {
     let host: String
 
-    static let defaultHost = "192.168.0.244"
+    /// Find an Orange decoder on the LAN: SSDP M-SEARCH for its remote-control service.
+    /// Returns the box's IP, or nil if none answered within `timeout` seconds.
+    static func discover(timeout: Double = 3) async -> String? {
+        await Task.detached { ssdpSearch(st: "urn:schemas-orange-com:service:X_OrangeSTBRemoteControl:1",
+                                         timeout: timeout) }.value
+    }
+
+    private static func ssdpSearch(st: String, timeout: Double) -> String? {
+        let fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)
+        guard fd >= 0 else { return nil }
+        defer { close(fd) }
+        var tv = timeval(tv_sec: 0, tv_usec: 300_000)
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+        var dst = sockaddr_in()
+        dst.sin_family = sa_family_t(AF_INET)
+        dst.sin_port = in_port_t(1900).bigEndian
+        inet_pton(AF_INET, "239.255.255.250", &dst.sin_addr)
+        let msg = "M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\nMAN: \"ssdp:discover\"\r\nMX: 2\r\nST: \(st)\r\n\r\n"
+        let bytes = Array(msg.utf8)
+        let deadline = Date().addingTimeInterval(timeout)
+        var lastSend = Date.distantPast
+        var buf = [UInt8](repeating: 0, count: 2048)
+        while Date() < deadline {
+            if Date().timeIntervalSince(lastSend) > 1 {          // resend once a second
+                _ = withUnsafePointer(to: &dst) {
+                    $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                        sendto(fd, bytes, bytes.count, 0, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
+                    }
+                }
+                lastSend = Date()
+            }
+            var from = sockaddr_in()
+            var len = socklen_t(MemoryLayout<sockaddr_in>.size)
+            let n = withUnsafeMutablePointer(to: &from) {
+                $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { recvfrom(fd, &buf, buf.count, 0, $0, &len) }
+            }
+            guard n > 0 else { continue }
+            let reply = String(decoding: buf[0..<n], as: UTF8.self)
+            guard reply.localizedCaseInsensitiveContains(st) else { continue }
+            var ip = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
+            inet_ntop(AF_INET, &from.sin_addr, &ip, socklen_t(INET_ADDRSTRLEN))
+            return String(cString: ip)
+        }
+        return nil
+    }
 
     enum Key: Int {
         case power = 116, ok = 352, back = 158, menu = 139

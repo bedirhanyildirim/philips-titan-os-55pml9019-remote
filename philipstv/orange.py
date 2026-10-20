@@ -14,6 +14,9 @@ wolSupport "0": once it drops off the network only its own remote can wake it.
 
 from __future__ import annotations
 
+import socket
+import time
+
 import requests
 
 KEYS = {
@@ -26,8 +29,34 @@ KEYS = {
 }
 
 
+SSDP_ST = "urn:schemas-orange-com:service:X_OrangeSTBRemoteControl:1"
+
+
+def discover(timeout: float = 3.0):
+    """Find an Orange decoder on the LAN via SSDP. Returns its IP or None."""
+    msg = ("M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\nMAN: \"ssdp:discover\"\r\n"
+           f"MX: 2\r\nST: {SSDP_ST}\r\n\r\n").encode()
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.settimeout(0.3)
+    end, last = time.time() + timeout, 0.0
+    try:
+        while time.time() < end:
+            if time.time() - last > 1:
+                s.sendto(msg, ("239.255.255.250", 1900))
+                last = time.time()
+            try:
+                data, (ip, _) = s.recvfrom(2048)
+            except socket.timeout:
+                continue
+            if SSDP_ST.lower() in data.decode(errors="replace").lower():
+                return ip
+    finally:
+        s.close()
+    return None
+
+
 class OrangeBox:
-    def __init__(self, host: str = "192.168.0.244"):
+    def __init__(self, host: str):
         self.base = f"http://{host}:8080/remoteControl/cmd"
 
     def _call(self, **params) -> dict:

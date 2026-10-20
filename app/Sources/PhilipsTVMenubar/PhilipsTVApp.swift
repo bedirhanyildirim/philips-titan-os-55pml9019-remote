@@ -77,7 +77,7 @@ struct MainView: View {
                     case .remote: RemoteTab()
                     case .apps: AppsTab()
                     case .sources: SourcesTab()
-                    case .orange: OrangeTab()
+                    case .orange: if state.orangeHost != nil { OrangeTab() } else { HomeTab(tab: $tab) }
                     case .ambilight: AmbilightView()
                     case .settings: SettingsTab()
                     }
@@ -112,7 +112,7 @@ struct MainView: View {
 
     private var tabBar: some View {
         HStack(spacing: 4) {
-            ForEach(Tab.allCases) { t in
+            ForEach(Tab.allCases.filter { $0 != .orange || state.orangeHost != nil }) { t in
                 Button { tab = t } label: {
                     Image(systemName: t.icon)
                         .font(.system(size: 14, weight: .medium))

@@ -107,6 +107,11 @@ YouTube/YouTubeKids → `https://www.youtube.com`, Netflix → `https://www.netf
 
 ## Orange TV box (192.168.0.244)
 
+The app treats the box as **optional**: at startup it sends an SSDP M-SEARCH for
+`urn:schemas-orange-com:service:X_OrangeSTBRemoteControl:1`; the Orange tab, the Home
+sources row and the "HDMI 1 · Orange TV" label only appear when a box answered (host saved in
+UserDefaults `orangeHost`; Settings → Orange TV box → Scan network / Forget).
+
 Sagemcom, SoftAtHome 1.7.19, Polish-only UI (no menu language option — only audio
 "Wersja językowa" and subtitles). Same local API as Orange France Livebox decoders, no auth:
 - `GET :8080/remoteControl/cmd?operation=10` → `activeStandbyState` ("0" on, "1" standby),

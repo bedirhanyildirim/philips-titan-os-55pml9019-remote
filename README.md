@@ -23,7 +23,7 @@ Titan OS Mobile app), JointSpace v6, DIAL and the YouTube Lounge API.
 | 🎮 **Remote** | D-pad, OK/Home/Back/Menu/Info, media keys, channel ±, pointer trackpad, keyboard |
 | ▦ **Apps** | Every app installed on the TV (icons, search, ★ favourites) — one click launches it |
 | ⌁ **Sources** | HDMI 1–4, Satellite, Antenna, Streaming, USB, Network |
-| 📦 **Orange TV** | Remote for an Orange Polska / Livebox decoder: power, d-pad, channels, digits |
+| 📦 **Orange TV** | *Optional* — only shown when an Orange decoder is found on the network (SSDP). Power, d-pad, channels, digits |
 | ✨ **Ambilight** | Follow video / follow audio / colour presets, and a **working Off** on Titan OS |
 | ⚙️ **Settings** | Connection status, pairing, refresh |
 
@@ -70,7 +70,7 @@ Not in the Titan catalog yet (expected late 2026). The TV has a DTS Play-Fi rece
 | **DIAL** `http://<tv>:56789/apps/` | YouTube/Netflix/Prime launch without pairing, app running state |
 | **YouTube Lounge API** | now playing, play/pause/seek/next on the TV's YouTube app |
 | **Wake-on-LAN** | power on from deep standby |
-| **Orange decoder** `http://<box>:8080/remoteControl/cmd` | status, keys, tune by number (same API as Orange France Livebox) |
+| **Orange decoder** `http://<box>:8080/remoteControl/cmd` | optional, auto-discovered via SSDP (`X_OrangeSTBRemoteControl`): status, keys, tune by number (same API as Orange France Livebox) |
 
 Full protocol details, payloads, key codes and gotchas: **[docs/TITAN_OS_API.md](docs/TITAN_OS_API.md)**.
 

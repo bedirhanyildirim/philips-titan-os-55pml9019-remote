@@ -13,7 +13,7 @@ struct TVSource: Identifiable, Hashable {
     let path: Path
 
     static let hdmi: [TVSource] = [
-        TVSource(id: "hdmi1", name: "Orange", detail: "HDMI 1 · TV box", icon: "rectangle.connected.to.line.below", path: .bottom(up: 3)),
+        TVSource(id: "hdmi1", name: "HDMI 1", detail: "HDMI 1", icon: "rectangle.connected.to.line.below", path: .bottom(up: 3)),
         TVSource(id: "hdmi2", name: "Home Theatre", detail: "HDMI 2 · Soundbar (eARC)", icon: "hifispeaker.2", path: .bottom(up: 2)),
         TVSource(id: "hdmi3", name: "Computer", detail: "HDMI 3", icon: "desktopcomputer", path: .bottom(up: 1)),
         TVSource(id: "hdmi4", name: "HDMI 4", detail: "HDMI 4", icon: "cable.connector.horizontal", path: .bottom(up: 0)),
@@ -36,7 +36,11 @@ struct SourcesTab: View {
         VStack(spacing: 10) {
             SectionLabel(text: "Sources")
             if state.titan == nil { TitanPairCard() }
-            group("HDMI", icon: "cable.connector", TVSource.hdmi)
+            group("HDMI", icon: "cable.connector", TVSource.hdmi.map { s in
+                // HDMI 1 is labelled after the Orange box when one was found
+                guard s.id == "hdmi1", state.orangeHost != nil else { return s }
+                return TVSource(id: s.id, name: "Orange TV", detail: "HDMI 1 · TV box", icon: "tv.and.mediabox", path: s.path)
+            })
             group("TV", icon: "tv", TVSource.tv)
             group("Other", icon: "square.stack", TVSource.other)
             Text("Sources are picked through the TV's Sources menu (takes a few seconds). Screen mirroring is left out on purpose: it drops the TV off the network.")

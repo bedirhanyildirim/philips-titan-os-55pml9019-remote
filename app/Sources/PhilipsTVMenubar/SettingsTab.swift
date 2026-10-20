@@ -30,6 +30,21 @@ struct SettingsTab: View {
                     }
                 }
             }
+            Card(title: "Orange TV box", icon: "tv.and.mediabox") {
+                if let host = state.orangeHost {
+                    row("Found at", host)
+                    row("Status", !state.orangeReachable ? "Not answering" : (state.orangeStatus?.isOn == true ? "On" : "Standby"))
+                } else {
+                    Text(state.orangeScanning ? "Scanning the network…" : "No Orange box found on this network.")
+                        .font(.system(size: 11)).foregroundStyle(.secondary)
+                }
+                HStack(spacing: 6) {
+                    PillButton(title: state.orangeScanning ? "Scanning…" : "Scan network") {
+                        Task { await state.discoverOrange() }
+                    }
+                    if state.orangeHost != nil { PillButton(title: "Forget") { state.forgetOrange() } }
+                }
+            }
             Card(title: "App", icon: "app.badge") {
                 HStack {
                     PillButton(title: "Refresh app list") { Task { await state.loadApps() } }
