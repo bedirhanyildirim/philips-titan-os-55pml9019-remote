@@ -89,50 +89,90 @@ struct HomeTab: View {
     }
 }
 
-/// Stylised TV with an Ambilight halo in the last chosen colour.
+/// The living-room setup as it really is: wall-mounted TV with Ambilight on the left, top
+/// and right edges only, the soundbar on the TV unit below, the Orange box in its cubby.
 struct TVPreview: View {
     @EnvironmentObject var state: AppState
 
+    private let wall = Color(.sRGB, red: 0.20, green: 0.07, blue: 0.08)
+    private let wood = Color(.sRGB, red: 0.80, green: 0.68, blue: 0.52)
+
     var body: some View {
-        VStack(spacing: 0) {
-            ZStack {
-                if state.isOn {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(state.glow.opacity(0.55))
-                        .blur(radius: 18)
-                        .padding(.horizontal, 6)
+        let on = state.isOn
+        let glow = on && state.glow != .clear ? state.glow : Color.clear
+        let orangeOn = state.orangeReachable && state.orangeStatus?.isOn == true
+
+        GeometryReader { g in
+            let w = g.size.width
+            let tvW = w * 0.62, tvH = tvW * 9 / 16
+            let tvX = (w - tvW) / 2, tvY: CGFloat = 16
+            let unitY = tvY + tvH + 30
+
+            ZStack(alignment: .topLeading) {
+                wall
+                // Ambilight: left, top, right — no bottom LEDs
+                Group {
+                    Rectangle().fill(glow).frame(width: 14, height: tvH * 0.95)
+                        .offset(x: tvX - 6, y: tvY + tvH * 0.03)
+                    Rectangle().fill(glow).frame(width: 14, height: tvH * 0.95)
+                        .offset(x: tvX + tvW - 8, y: tvY + tvH * 0.03)
+                    Rectangle().fill(glow).frame(width: tvW * 0.95, height: 12)
+                        .offset(x: tvX + tvW * 0.025, y: tvY - 5)
                 }
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(LinearGradient(colors: state.isOn
-                                         ? [Color(white: 0.16), Color(white: 0.05)]
-                                         : [Color(white: 0.07), Color(white: 0.03)],
+                .blur(radius: 14)
+                .opacity(0.9)
+
+                // TV
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(LinearGradient(colors: on ? [Color(white: 0.18), Color(white: 0.06)]
+                                                    : [Color(white: 0.06), Color(white: 0.02)],
                                          startPoint: .topLeading, endPoint: .bottomTrailing))
-                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.15), lineWidth: 1.5))
-                    .padding(.horizontal, 22)
-                VStack(spacing: 4) {
-                    if state.isOn, let app = state.nowOn?.app {
-                        AppIcon(app: app, size: 30)
-                    } else if state.isOn, let n = state.nowOn {
-                        Image(systemName: n.icon).font(.system(size: 20)).foregroundStyle(Theme.accent)
-                    } else {
-                        Text("PHILIPS").font(.system(size: 11, weight: .heavy)).tracking(2)
-                            .foregroundStyle(state.isOn ? Theme.accent : .secondary)
+                    .overlay(RoundedRectangle(cornerRadius: 2).stroke(Color(white: 0.25), lineWidth: 1.5))
+                    .overlay(screen)
+                    .frame(width: tvW, height: tvH)
+                    .offset(x: tvX, y: tvY)
+
+                // TV unit (light wood) with the soundbar on top and the Orange box in the middle cubby
+                Rectangle().fill(wood.opacity(0.9))
+                    .frame(width: w, height: 5).offset(y: unitY)
+                Rectangle().fill(wood.opacity(0.55))
+                    .frame(width: w, height: g.size.height - unitY - 5).offset(y: unitY + 5)
+                Rectangle().fill(Color.black.opacity(0.35))
+                    .frame(width: w * 0.3, height: g.size.height - unitY - 9)
+                    .offset(x: w * 0.35, y: unitY + 7)
+                RoundedRectangle(cornerRadius: 2).fill(Color(white: 0.1))
+                    .frame(width: 28, height: 8)
+                    .overlay(alignment: .leading) {
+                        Circle().fill(orangeOn ? Color.orange : Color(white: 0.25))
+                            .frame(width: 3, height: 3).padding(.leading, 3)
                     }
-                    Text(state.isOn ? (state.nowOn?.title ?? "TV on") : "TV off")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(state.isOn ? .white : .secondary)
-                }
+                    .offset(x: w / 2 - 6, y: g.size.height - 12)
+                RoundedRectangle(cornerRadius: 3).fill(Color(white: 0.12))
+                    .frame(width: tvW * 0.75, height: 7)
+                    .overlay(Circle().fill(on ? Color.white.opacity(0.8) : Color(white: 0.25)).frame(width: 2.5, height: 2.5))
+                    .offset(x: (w - tvW * 0.75) / 2, y: unitY - 7)
             }
-            .frame(height: 118)
-            HStack {
-                Rectangle().frame(width: 18, height: 2).rotationEffect(.degrees(25))
-                Spacer()
-                Rectangle().frame(width: 18, height: 2).rotationEffect(.degrees(-25))
-            }
-            .foregroundStyle(Color.white.opacity(0.2))
-            .padding(.horizontal, 44)
         }
-        .padding(.top, 4)
+        .frame(height: 150)
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.cardStroke))
+    }
+
+    private var screen: some View {
+        VStack(spacing: 4) {
+            if state.isOn, let app = state.nowOn?.app {
+                AppIcon(app: app, size: 26)
+            } else if state.isOn, let n = state.nowOn {
+                Image(systemName: n.icon).font(.system(size: 17)).foregroundStyle(Theme.accent)
+            } else {
+                Text("PHILIPS").font(.system(size: 9, weight: .heavy)).tracking(2)
+                    .foregroundStyle(state.isOn ? Theme.accent : Color(white: 0.3))
+            }
+            Text(state.isOn ? (state.nowOn?.title ?? "TV on") : "TV off")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(state.isOn ? .white : Color(white: 0.4))
+                .lineLimit(1).padding(.horizontal, 6)
+        }
     }
 }
 

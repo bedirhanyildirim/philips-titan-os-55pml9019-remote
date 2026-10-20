@@ -62,7 +62,7 @@ struct AmbilightView: View {
                     }
                     Spacer()
                     PillButton(title: "Off", tint: Color.red.opacity(0.35)) {
-                        selected = "Off"; state.glow = .gray
+                        selected = "Off"; state.glow = .clear
                         state.run("Ambilight") { try await $0.setAmbilightStyle(.off) }
                     }
                 }
