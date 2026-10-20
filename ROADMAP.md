@@ -231,6 +231,12 @@ open dist/PhilipsTVMenubar.app
       challenge reuse, no routine polling (MQTT for power/now-on, 2-min health probe, 30-s cached
       context), coalesced pointer moves. Recovery from a dead JointSpace still needs a power cut —
       documented in README "Known issue". Deep standby + WoL does NOT fix it (tested).
+- [ ] **Ad blocking with AdGuard Home on a Raspberry Pi** (planned for the weekend): Pi OS Lite 64-bit,
+      SSH on, hostname `adguard`, wired to the TP-Link router; install AdGuard Home, add
+      `dns/tv-adblock.txt` + a TV blocklist (e.g. Okazakee/tv-dns-blocklist) as a per-client rule
+      for the TV; set the TV's DNS (Settings → Network → Wired → Manual) to the Pi. Keeps data at
+      home and works while the router VPN is on (LAN resolver). The Titan launcher itself can't be
+      replaced (no ADB/dev mode; free-my-tv doesn't support Titan) — DNS only removes ad content.
 - [ ] **Pointer (trackpad) + keyboard don't work** (user report, 2026-10-20). Keyboard now
       goes over MQTT `keyboard {"opcode":0,"text":<char>}` — verify the payload (maybe whole
       string / needs a focused field); pointer still uses JointSpace `input/pointer` — check

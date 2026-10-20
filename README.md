@@ -12,6 +12,9 @@ channels that *do* work — the **Titan OS MQTT** protocol (reverse-engineered f
 Titan OS Mobile app), JointSpace v6, DIAL and the YouTube Lounge API.
 👉 **[docs/TITAN_OS_API.md](docs/TITAN_OS_API.md)**
 
+📝 The story behind it — from a 403 to Disney+ over MQTT, built with AI:
+**[I Built a Mac App to Control My TV with AI](https://bedirhanyildirim.com/building-a-mac-tv-remote-with-ai/)**
+
 > Tested on a **Philips 55PML9019/12 "The Xtra"** (Titan OS, JointSpace 6.1, firmware
 > 248.010.000.121, Poland) with an **Orange Polska** Sagemcom decoder on HDMI 1 and a
 > **Philips TAB6309** soundbar on HDMI 2 (eARC). Other Philips Titan OS TVs (2024+) should
