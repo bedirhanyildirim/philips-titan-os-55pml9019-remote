@@ -63,6 +63,13 @@ final class AppState: ObservableObject {
             if statusMessage.isEmpty { break }
         }
         await loadApps()
+        // Keep power state fresh: the TV can be switched off by its remote or by the
+        // Orange box over HDMI-CEC, and nothing notifies us.
+        while !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: 15_000_000_000)
+            await refresh()
+            await refreshOrange()
+        }
     }
 
     func refresh() async {
@@ -74,8 +81,11 @@ final class AppState: ObservableObject {
             if let act = try? await c.currentActivity() { currentApp = act }
             statusMessage = ""
         } catch {
-            statusMessage = titan != nil ? "JointSpace not responding (remote works via MQTT)" : "Can't reach the TV"
-            AppState.log("refresh ERROR: \(error)")
+            // In deep standby the TV drops off the network entirely ("Host is down").
+            // (In quick standby it still answers and reports "On" — see ROADMAP.)
+            if isOn { AppState.log("refresh ERROR: \(error)") }
+            isOn = false
+            statusMessage = "TV off or unreachable"
         }
     }
 

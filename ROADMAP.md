@@ -194,9 +194,10 @@ open dist/PhilipsTVMenubar.app
 - [ ] **Ambilight Off** — confirmed 2026-10-20: `POST ambilight/power Off` returns 200 and
       GET reports "Off", but the lights stay on. Try `input/key AmbilightOnOff`, or
       `ambilight/mode manual` + black `ambilight/cached`.
-- [ ] **Power state is wrong when the TV is off** (2026-10-20): after turning the TV off with
-      the remote, `GET /6/powerstate` still returns `"On"` (JointSpace keeps running in
-      Titan's quick standby), so the app shows "TV on". MQTT `state/power` had no retained
+- [~] **Power state when the TV is off** — the app now polls every 15 s and shows "TV off"
+      when the TV is unreachable (deep standby, e.g. after the Orange box turns it off via
+      CEC: the TV drops off the network). Still open: in *quick* standby (TV remote off)
+      `GET /6/powerstate` keeps returning `"On"` (JointSpace keeps running). MQTT `state/power` had no retained
       message; `channels/state` read `{"state":"inactive"}`. Find a reliable signal (e.g.
       subscribe to `state/power` and watch it change on power toggle, `context`, ambilight
       processed values) and poll it periodically in the app.
