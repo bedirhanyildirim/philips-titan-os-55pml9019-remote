@@ -89,18 +89,14 @@ struct HomeTab: View {
     }
 }
 
-/// The TV (official 55PML9019 product shot, cropped to the panel and loaded from Philips'
-/// image CDN — not bundled) with Ambilight on the left, top and right edges, soundbar below.
+/// The wall-mounted TV with Ambilight on the left, top and right edges, soundbar below.
 struct TVPreview: View {
     @EnvironmentObject var state: AppState
-
-    static let productImage = URL(string:
-        "https://images.philips.com/is/image/philipsconsumer/tpv_258714?cropN=0.155,0.238,0.692,0.495&wid=700&fmt=png-alpha")
 
     var body: some View {
         let on = state.isOn
         let glow = on && state.glow != .clear ? state.glow : Color.clear
-        let tvW: CGFloat = 200, tvH: CGFloat = tvW * 401 / 700
+        let tvW: CGFloat = 200, tvH: CGFloat = tvW * 9 / 16 + 3
 
         VStack(spacing: 14) {
             ZStack {
@@ -113,12 +109,17 @@ struct TVPreview: View {
                 .blur(radius: 16)
 
                 ZStack {
-                    AsyncImage(url: Self.productImage) { $0.resizable().scaledToFit() } placeholder: {
-                        RoundedRectangle(cornerRadius: 2).fill(Color(white: 0.12))
-                    }
-                    // panel: dimmed while on (so our label reads), black when off
-                    Rectangle().fill(Color.black.opacity(on ? 0.55 : 0.92)).padding(2)
-                    screen
+                    // thin dark-grey frame, black panel (slightly lifted while on)
+                    RoundedRectangle(cornerRadius: 2).fill(Color(white: 0.22))
+                    Rectangle()
+                        .fill(on ? LinearGradient(colors: [Color(white: 0.11), Color(white: 0.04)],
+                                                  startPoint: .topLeading, endPoint: .bottomTrailing)
+                                 : LinearGradient(colors: [.black, .black], startPoint: .top, endPoint: .bottom))
+                        .padding(EdgeInsets(top: 2, leading: 2, bottom: 5, trailing: 2))
+                    Text("PHILIPS").font(.system(size: 3, weight: .bold)).foregroundStyle(Color(white: 0.55))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                        .padding(.leading, 4).padding(.bottom, 0.5)
+                    screen.padding(.bottom, 3)
                 }
                 .frame(width: tvW, height: tvH)
             }
