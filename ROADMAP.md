@@ -131,6 +131,10 @@ Sagemcom, SoftAtHome 1.7.19, Polish-only UI (no menu language option — only au
 - Unknown JointSpace key names always return 200 — no Netflix/Disney key exists.
 - Philips "Smart TV" Android app (com.tpvision.philipstvapp2): no Titan app launching.
 - **`/6/channeldb/*` and big `menuitems/*` dumps hang JointSpace** → TV must be unplugged.
+- Second JointSpace failure mode (2026-10-20, after a Wake-on-LAN wake): the web server answers
+  instantly but **every** path (even `/6/system`, any API version, :1925 too) returns 404 —
+  the backend isn't registered. MQTT/DIAL keep working. Only a TV restart restores it. The app
+  now treats "JointSpace down but MQTT up" as TV on.
 - **Matter** (added TV to Apple Home via code): Apple Home shows "not supported" —
   no useful controls. Dead end for source/app.
 - **Spotify on Titan OS:** not in the store, no sideloading; browser won't work (Nagra DRM).

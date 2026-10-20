@@ -105,18 +105,24 @@ final class AppState: ObservableObject {
 
     func refresh() async {
         guard let c = client else { AppState.log("refresh: no client"); return }
-        do {
-            let state = try await c.powerState()
+        let state = try? await c.powerState()
+        if state == "On" || state == "Standby" {
             isOn = (state == "On")
             if modelName.isEmpty, let name = try? await c.systemInfo()["name"] as? String { modelName = name }
             statusMessage = ""
-        } catch {
-            // In deep standby the TV drops off the network entirely ("Host is down").
-            // (In quick standby it still answers and reports "On" — see ROADMAP.)
-            if isOn { AppState.log("refresh ERROR: \(error)") }
-            isOn = false
-            statusMessage = "TV off or unreachable"
+            return
         }
+        // JointSpace failed (unreachable, wedged, or its backend answering 404 to everything).
+        // If Titan MQTT still answers, the TV is on — only JointSpace is down.
+        if let creds = titan, (try? await TitanClient.retained(creds, "channels/state")) != nil {
+            isOn = true
+            statusMessage = "JointSpace not responding — restart the TV for Ambilight"
+            return
+        }
+        // In deep standby the TV drops off the network entirely ("Host is down").
+        if isOn { AppState.log("refresh: TV unreachable (powerstate=\(state ?? "error"))") }
+        isOn = false
+        statusMessage = "TV off or unreachable"
     }
 
     nonisolated static func log(_ msg: String) {
