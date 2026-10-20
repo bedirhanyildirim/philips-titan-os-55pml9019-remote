@@ -86,7 +86,9 @@ final class AppState: ObservableObject {
         await loadApps()
         await discoverOrange()
         youtube.onUpdate = { [weak self] np in Task { @MainActor in self?.ytNow = np } }
-        youtube.start()                                // idles while YouTube isn't open
+        if Snapshot.outputDir == nil {
+            youtube.start()                            // idles while YouTube isn't open
+        }
         // Live "now on" — every 8 s while the TV is on (Titan's JointSpace HTTPS server
         // wedges under rapid requests; keep polling light).
         Task {
@@ -101,6 +103,8 @@ final class AppState: ObservableObject {
             try? await Task.sleep(nanoseconds: 15_000_000_000)
             await refresh()
             await refreshOrange()
+            // the first try can hit macOS' Local Network race after a rebuild
+            if !appsLoaded && isOn { await loadApps() }
         }
     }
 
@@ -115,7 +119,8 @@ final class AppState: ObservableObject {
         }
         // JointSpace failed (unreachable, wedged, or its backend answering 404 to everything).
         // If Titan MQTT still answers, the TV is on — only JointSpace is down.
-        if let creds = titan, (try? await TitanClient.retained(creds, "channels/state")) != nil {
+        // A successful MQTT connect is enough — the retained message may not arrive in time.
+        if titan != nil, await titanReachable() {
             isOn = true
             statusMessage = "JointSpace not responding — restart the TV for Ambilight"
             return
@@ -188,6 +193,13 @@ final class AppState: ObservableObject {
                 statusMessage = "\(label) failed"
             }
         }
+    }
+
+    /// True if the TV's Titan MQTT server accepts our login (the TV is on, even if JointSpace isn't).
+    private func titanReachable() async -> Bool {
+        guard let creds = titan else { return false }
+        do { _ = try await TitanClient.retained(creds, "channels/state"); return true }
+        catch { return false }
     }
 
     // MARK: now on
@@ -359,11 +371,13 @@ final class AppState: ObservableObject {
 
     // MARK: apps (Titan MQTT, DIAL fallback)
 
+    private var appsLoaded = false
+
     func loadApps() async {
         guard let creds = titan else { return }
         do {
             let apps = try await TitanClient.installedApps(creds)
-            if !apps.isEmpty { tvApps = apps }
+            if !apps.isEmpty { tvApps = apps; appsLoaded = true }
         } catch {
             AppState.log("titan apps ERROR: \(error)")
         }

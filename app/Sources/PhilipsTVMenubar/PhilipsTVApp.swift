@@ -4,6 +4,12 @@ import SwiftUI
 struct PhilipsTVApp: App {
     @StateObject private var state = AppState()
 
+    init() {
+        if let dir = Snapshot.outputDir {
+            Task { @MainActor in await Snapshot.run(dir: dir) }
+        }
+    }
+
     var body: some Scene {
         MenuBarExtra {
             ContentView()
