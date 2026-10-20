@@ -89,89 +89,61 @@ struct HomeTab: View {
     }
 }
 
-/// The living-room setup as it really is: wall-mounted TV with Ambilight on the left, top
-/// and right edges only, the soundbar on the TV unit below, the Orange box in its cubby.
+/// The TV (official 55PML9019 product shot, cropped to the panel and loaded from Philips'
+/// image CDN — not bundled) with Ambilight on the left, top and right edges, soundbar below.
 struct TVPreview: View {
     @EnvironmentObject var state: AppState
 
-    private let wall = Color(.sRGB, red: 0.20, green: 0.07, blue: 0.08)
-    private let wood = Color(.sRGB, red: 0.80, green: 0.68, blue: 0.52)
+    static let productImage = URL(string:
+        "https://images.philips.com/is/image/philipsconsumer/tpv_258714?cropN=0.155,0.238,0.692,0.495&wid=700&fmt=png-alpha")
 
     var body: some View {
         let on = state.isOn
         let glow = on && state.glow != .clear ? state.glow : Color.clear
-        let orangeOn = state.orangeReachable && state.orangeStatus?.isOn == true
+        let tvW: CGFloat = 200, tvH: CGFloat = tvW * 401 / 700
 
-        GeometryReader { g in
-            let w = g.size.width
-            let tvW = w * 0.62, tvH = tvW * 9 / 16
-            let tvX = (w - tvW) / 2, tvY: CGFloat = 16
-            let unitY = tvY + tvH + 30
-
-            ZStack(alignment: .topLeading) {
-                wall
+        VStack(spacing: 14) {
+            ZStack {
                 // Ambilight: left, top, right — no bottom LEDs
                 Group {
-                    Rectangle().fill(glow).frame(width: 14, height: tvH * 0.95)
-                        .offset(x: tvX - 6, y: tvY + tvH * 0.03)
-                    Rectangle().fill(glow).frame(width: 14, height: tvH * 0.95)
-                        .offset(x: tvX + tvW - 8, y: tvY + tvH * 0.03)
-                    Rectangle().fill(glow).frame(width: tvW * 0.95, height: 12)
-                        .offset(x: tvX + tvW * 0.025, y: tvY - 5)
+                    Rectangle().fill(glow).frame(width: 16, height: tvH * 0.9).offset(x: -tvW / 2)
+                    Rectangle().fill(glow).frame(width: 16, height: tvH * 0.9).offset(x: tvW / 2)
+                    Rectangle().fill(glow).frame(width: tvW * 0.92, height: 14).offset(y: -tvH / 2)
                 }
-                .blur(radius: 14)
-                .opacity(0.9)
+                .blur(radius: 16)
 
-                // TV
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(LinearGradient(colors: on ? [Color(white: 0.18), Color(white: 0.06)]
-                                                    : [Color(white: 0.06), Color(white: 0.02)],
-                                         startPoint: .topLeading, endPoint: .bottomTrailing))
-                    .overlay(RoundedRectangle(cornerRadius: 2).stroke(Color(white: 0.25), lineWidth: 1.5))
-                    .overlay(screen)
-                    .frame(width: tvW, height: tvH)
-                    .offset(x: tvX, y: tvY)
-
-                // TV unit (light wood) with the soundbar on top and the Orange box in the middle cubby
-                Rectangle().fill(wood.opacity(0.9))
-                    .frame(width: w, height: 5).offset(y: unitY)
-                Rectangle().fill(wood.opacity(0.55))
-                    .frame(width: w, height: g.size.height - unitY - 5).offset(y: unitY + 5)
-                Rectangle().fill(Color.black.opacity(0.35))
-                    .frame(width: w * 0.3, height: g.size.height - unitY - 9)
-                    .offset(x: w * 0.35, y: unitY + 7)
-                RoundedRectangle(cornerRadius: 2).fill(Color(white: 0.1))
-                    .frame(width: 28, height: 8)
-                    .overlay(alignment: .leading) {
-                        Circle().fill(orangeOn ? Color.orange : Color(white: 0.25))
-                            .frame(width: 3, height: 3).padding(.leading, 3)
+                ZStack {
+                    AsyncImage(url: Self.productImage) { $0.resizable().scaledToFit() } placeholder: {
+                        RoundedRectangle(cornerRadius: 2).fill(Color(white: 0.12))
                     }
-                    .offset(x: w / 2 - 6, y: g.size.height - 12)
-                RoundedRectangle(cornerRadius: 3).fill(Color(white: 0.12))
-                    .frame(width: tvW * 0.75, height: 7)
-                    .overlay(Circle().fill(on ? Color.white.opacity(0.8) : Color(white: 0.25)).frame(width: 2.5, height: 2.5))
-                    .offset(x: (w - tvW * 0.75) / 2, y: unitY - 7)
+                    // panel: dimmed while on (so our label reads), black when off
+                    Rectangle().fill(Color.black.opacity(on ? 0.55 : 0.92)).padding(2)
+                    screen
+                }
+                .frame(width: tvW, height: tvH)
             }
+            .frame(height: tvH + 24)
+
+            // soundbar
+            RoundedRectangle(cornerRadius: 3).fill(Color(white: 0.16))
+                .frame(width: tvW * 0.92, height: 10)
+                .overlay(Circle().fill(on ? Color.white.opacity(0.85) : Color(white: 0.3)).frame(width: 3, height: 3))
         }
-        .frame(height: 150)
-        .clipShape(RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.cardStroke))
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 10)
     }
 
     private var screen: some View {
         VStack(spacing: 4) {
             if state.isOn, let app = state.nowOn?.app {
-                AppIcon(app: app, size: 26)
+                AppIcon(app: app, size: 28)
             } else if state.isOn, let n = state.nowOn {
-                Image(systemName: n.icon).font(.system(size: 17)).foregroundStyle(Theme.accent)
-            } else {
-                Text("PHILIPS").font(.system(size: 9, weight: .heavy)).tracking(2)
-                    .foregroundStyle(state.isOn ? Theme.accent : Color(white: 0.3))
+                Image(systemName: n.icon).font(.system(size: 18)).foregroundStyle(.white)
             }
             Text(state.isOn ? (state.nowOn?.title ?? "TV on") : "TV off")
-                .font(.system(size: 11, weight: .semibold))
+                .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(state.isOn ? .white : Color(white: 0.4))
-                .lineLimit(1).padding(.horizontal, 6)
+                .lineLimit(1).padding(.horizontal, 8)
         }
     }
 }
