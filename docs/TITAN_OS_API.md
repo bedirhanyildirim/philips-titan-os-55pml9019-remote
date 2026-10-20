@@ -122,9 +122,14 @@ Check node ids on your TV with `POST /6/menuitems/settings/current {"nodes":[{"n
 
 ### ⚠️ Stability
 - Titan's JointSpace HTTPS server **wedges** under bursts of requests and on big list dumps
-  (`/6/channeldb/tv/channelLists/all` hung it until the TV was unplugged). Space calls out.
-- Second failure mode: after a Wake-on-LAN wake the server answered **404 to every path**
-  (backend not registered) while MQTT and DIAL kept working.
+  (`/6/channeldb/tv/channelLists/all` hung it until the TV was unplugged). Space calls out
+  (one at a time, ≥0.7 s apart worked for us; HA users report ~8 s as safe).
+- Second failure mode: the server answers **404 to every path** (backend not registered) while
+  MQTT and DIAL keep working. Seen after heavy testing + a Wake-on-LAN wake.
+- Recovery: **only a power cut**. Remote power, long-press power and deep standby + Wake-on-LAN
+  did not restore it.
+- Mitigation: don't poll JointSpace — use MQTT (`channels/state`, a successful login) for
+  power and home-screen state, reuse the Digest challenge, coalesce pointer moves.
 
 ## 3. DIAL (port 56789)
 

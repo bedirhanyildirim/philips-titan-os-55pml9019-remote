@@ -76,6 +76,30 @@ Not in the Titan catalog yet (expected late 2026). The TV has a DTS Play-Fi rece
 
 Full protocol details, payloads, key codes and gotchas: **[docs/TITAN_OS_API.md](docs/TITAN_OS_API.md)**.
 
+## Known issue: JointSpace instability on Titan OS
+
+On the 55PML9019 (firmware 248.010.000.121) the TV's JointSpace HTTPS server is fragile:
+
+- **Wedges under bursts of requests** — e.g. a large list dump (`/6/channeldb/tv/channelLists/all`) or many
+  calls in quick succession. The port stays open but TLS handshakes time out.
+- **Answers `404` to every path** (even `/6/system`, any API version) — seen after a day of heavy testing and
+  a Wake-on-LAN wake. Titan MQTT, DIAL and the YouTube Lounge keep working.
+- In both cases **only a power cut** (unplugging) restores it — remote power, long-press power and a full
+  deep-standby + Wake-on-LAN cycle did not. Other Home Assistant users report the same
+  ([home-assistant/core#156776](https://github.com/home-assistant/core/issues/156776)).
+
+How the app avoids triggering it (since v0.2):
+
+- Every JointSpace request goes through a **gate**: one request at a time, ≥0.7 s apart.
+- The Digest challenge is **reused**, so each call is one round trip instead of two.
+- **No routine JointSpace polling**: power state, model and "now on" come from Titan MQTT; JointSpace gets one
+  light health probe every 2 minutes, and `context` is read at most every 30 s.
+- Trackpad pointer moves are **coalesced** into one request at a time.
+- List-dumping endpoints are never called.
+
+What still needs JointSpace: **Ambilight** and the **pointer**. Everything else (apps, remote keys, sources,
+YouTube, Orange box, Wake-on-LAN) works without it. When JointSpace is down the footer says so.
+
 ## Install (macOS app)
 
 ```bash

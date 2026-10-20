@@ -108,27 +108,58 @@ final class AppState: ObservableObject {
         }
     }
 
+    // JointSpace health. Titan's JointSpace server is fragile (wedges under bursts, or answers
+    // 404 to everything until a power cut), so we don't poll it: power state and "now on" come
+    // from Titan MQTT, and JointSpace gets one light probe every 2 minutes.
+    @Published var jointSpaceDown = false
+    private var lastJointSpaceProbe = Date.distantPast
+
     func refresh() async {
         guard let c = client else { AppState.log("refresh: no client"); return }
-        let state = try? await c.powerState()
-        if state == "On" || state == "Standby" {
+        guard let creds = titan else {
+            // No Titan pairing: JointSpace is the only source.
+            let state = try? await c.powerState()
             isOn = (state == "On")
-            if modelName.isEmpty, let name = try? await c.systemInfo()["name"] as? String { modelName = name }
-            statusMessage = ""
+            statusMessage = state == nil ? "TV off or unreachable" : ""
             return
         }
-        // JointSpace failed (unreachable, wedged, or its backend answering 404 to everything).
-        // If Titan MQTT still answers, the TV is on — only JointSpace is down.
-        // A successful MQTT connect is enough — the retained message may not arrive in time.
-        if titan != nil, await titanReachable() {
-            isOn = true
-            statusMessage = "JointSpace not responding — restart the TV for Ambilight"
+        // Titan MQTT accepting our login = TV on (it leaves the network in deep standby).
+        guard await titanReachable() else {
+            if isOn { AppState.log("refresh: TV unreachable") }
+            isOn = false
+            statusMessage = "TV off or unreachable"
             return
         }
-        // In deep standby the TV drops off the network entirely ("Host is down").
-        if isOn { AppState.log("refresh: TV unreachable (powerstate=\(state ?? "error"))") }
-        isOn = false
-        statusMessage = "TV off or unreachable"
+        isOn = true
+        if modelName.isEmpty,
+           let model = (try? await TitanClient.retained(creds, "info"))??["model"] as? String {
+            modelName = model
+        }
+        if Date().timeIntervalSince(lastJointSpaceProbe) > 120 {
+            lastJointSpaceProbe = Date()
+            let ok = (try? await c.powerState()) != nil
+            if ok != !jointSpaceDown { AppState.log("JointSpace \(ok ? "back" : "down")") }
+            jointSpaceDown = !ok
+        }
+        statusMessage = jointSpaceDown ? "JointSpace down — Ambilight unavailable until the TV is power-cycled" : ""
+    }
+
+    /// Pointer moves arrive in bursts while dragging; coalesce them into one JointSpace
+    /// request at a time (the gate in PhilipsClient spaces them out).
+    private var pendingPointer = (dx: 0, dy: 0)
+    private var pointerTask: Task<Void, Never>?
+
+    func pointer(_ dx: Int, _ dy: Int) {
+        pendingPointer.dx += dx; pendingPointer.dy += dy
+        guard pointerTask == nil, let c = client else { return }
+        pointerTask = Task {
+            while pendingPointer != (0, 0) {
+                let (x, y) = pendingPointer
+                pendingPointer = (0, 0)
+                try? await c.pointerMove(x, y)
+            }
+            pointerTask = nil
+        }
     }
 
     nonisolated static func log(_ msg: String) {
@@ -204,9 +235,32 @@ final class AppState: ObservableObject {
 
     // MARK: now on
 
+    private var lastMQTTState: String?
+    private var contextCache: (value: String, at: Date)?
+
+    /// JointSpace `context` (NetTv / WatchExtension / WatchSatellite …), refreshed at most every
+    /// 30 s or when Titan's channels/state changed, and never while JointSpace is down.
+    private func cachedContext(_ c: PhilipsClient, changed: Bool) async -> String {
+        if !changed, let cache = contextCache, Date().timeIntervalSince(cache.at) < 30 { return cache.value }
+        guard !jointSpaceDown, let v = try? await c.context() else { return contextCache?.value ?? "NetTv" }
+        contextCache = (v, Date())
+        return v
+    }
+
     func refreshNowOn() async {
         guard isOn, let c = client else { nowOn = nil; return }
-        let level1 = (try? await c.context()) ?? "NetTv"
+        // Titan says reliably whether the launcher (home screen) is up.
+        let mqttState = titan == nil ? nil
+            : ((try? await TitanClient.retained(titan!, "channels/state")) ?? nil)?["state"] as? String
+        if mqttState == "launcher" {
+            nowOn = NowOn(title: "Home screen", icon: "house.fill")
+            lastLaunched = nil
+            lastMQTTState = mqttState
+            return
+        }
+        // Otherwise ask JointSpace which source is up — sparingly (see jointSpaceDown).
+        let level1 = await cachedContext(c, changed: mqttState != lastMQTTState)
+        lastMQTTState = mqttState
         if level1 == "WatchExtension" {
             if orangeReachable, let o = orangeStatus, o.isOn {
                 nowOn = NowOn(title: "Orange TV", detail: o.channelId.map { "HDMI 1 · channel #\($0)" } ?? "HDMI 1",
@@ -224,14 +278,7 @@ final class AppState: ObservableObject {
             lastLaunched = nil
             return
         }
-        // NetTv: home screen or an app. Titan says reliably whether the launcher is up.
-        if let creds = titan,
-           let st = (try? await TitanClient.retained(creds, "channels/state"))??["state"] as? String,
-           st == "launcher" {
-            nowOn = NowOn(title: "Home screen", icon: "house.fill")
-            lastLaunched = nil
-            return
-        }
+        // NetTv: an app is in front.
         // Which app? DIAL knows YouTube/Netflix/Prime; a stopped→running flip means it
         // was just opened (e.g. from the TV remote).
         var started: String?

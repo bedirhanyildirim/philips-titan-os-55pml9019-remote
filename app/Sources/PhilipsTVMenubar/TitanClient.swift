@@ -199,13 +199,13 @@ final class TitanClient: @unchecked Sendable {
 
         try await withTimeout(8) {
             try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
-                var resumed = false
+                // stateUpdateHandler runs on our serial queue; resume the continuation once
+                let once = Once()
                 c.stateUpdateHandler = { state in
-                    guard !resumed else { return }
                     switch state {
-                    case .ready: resumed = true; cont.resume()
-                    case .failed(let e), .waiting(let e): resumed = true; cont.resume(throwing: e)
-                    case .cancelled: resumed = true; cont.resume(throwing: TitanError.closed)
+                    case .ready: once.run { cont.resume() }
+                    case .failed(let e), .waiting(let e): once.run { cont.resume(throwing: e) }
+                    case .cancelled: once.run { cont.resume(throwing: TitanError.closed) }
                     default: break
                     }
                 }
@@ -374,5 +374,17 @@ enum TitanError: LocalizedError {
         case .timeout: return "timed out"
         case .closed: return "connection closed"
         }
+    }
+}
+
+/// Runs a closure at most once (thread-safe).
+private final class Once: @unchecked Sendable {
+    private let lock = NSLock()
+    private var done = false
+    func run(_ body: () -> Void) {
+        lock.lock(); defer { lock.unlock() }
+        guard !done else { return }
+        done = true
+        body()
     }
 }

@@ -227,6 +227,10 @@ open dist/PhilipsTVMenubar.app
       message; `channels/state` read `{"state":"inactive"}`. Find a reliable signal (e.g.
       subscribe to `state/power` and watch it change on power toggle, `context`, ambilight
       processed values) and poll it periodically in the app.
+- [x] **JointSpace stability (mitigation, 2026-10-20):** request gate (1 in flight, ≥0.7 s), Digest
+      challenge reuse, no routine polling (MQTT for power/now-on, 2-min health probe, 30-s cached
+      context), coalesced pointer moves. Recovery from a dead JointSpace still needs a power cut —
+      documented in README "Known issue". Deep standby + WoL does NOT fix it (tested).
 - [ ] **Pointer (trackpad) + keyboard don't work** (user report, 2026-10-20). Keyboard now
       goes over MQTT `keyboard {"opcode":0,"text":<char>}` — verify the payload (maybe whole
       string / needs a focused field); pointer still uses JointSpace `input/pointer` — check

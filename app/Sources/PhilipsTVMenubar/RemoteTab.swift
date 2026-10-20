@@ -120,7 +120,7 @@ struct TrackpadView: View {
                             let dx = Int((v.location.x - last.x) * 2.2)
                             let dy = Int((v.location.y - last.y) * 2.2)
                             if abs(dx) > 1 || abs(dy) > 1 {
-                                state.run { try await $0.pointerMove(dx, dy) }
+                                state.pointer(dx, dy)
                                 self.last = v.location
                             }
                         } else { last = v.location }

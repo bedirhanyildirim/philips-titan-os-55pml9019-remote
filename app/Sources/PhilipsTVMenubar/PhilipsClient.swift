@@ -67,9 +67,29 @@ final class PhilipsClient: NSObject, URLSessionDelegate, @unchecked Sendable {
 
     private func url(_ path: String) -> URL { URL(string: "https://\(host):1926/6/\(path)")! }
 
+    // Titan's JointSpace HTTPS server wedges under bursts (only a power cut fixes it — see
+    // docs/TITAN_OS_API.md#stability). Every JointSpace call goes through this gate: one
+    // request at a time, at least `minGap` between them.
+    private let gate = RequestGate(minGap: 0.7)
+    // Reused Digest challenge, so a request is one round trip instead of two (401 + retry).
+    private var challenge: String?
+    private var nonceCount = 0
+
     @discardableResult
     private func request(_ path: String, method: String = "GET",
                          body: [String: Any]? = nil, authed: Bool = true) async throws -> Data {
+        await gate.acquire()
+        do {
+            let data = try await send(path, method: method, body: body, authed: authed)
+            await gate.release()
+            return data
+        } catch {
+            await gate.release()
+            throw error
+        }
+    }
+
+    private func send(_ path: String, method: String, body: [String: Any]?, authed: Bool) async throws -> Data {
         let bodyData = try body.map { try JSONSerialization.data(withJSONObject: $0) }
         func build(auth: String?) -> URLRequest {
             var req = URLRequest(url: url(path))
@@ -81,25 +101,32 @@ final class PhilipsClient: NSObject, URLSessionDelegate, @unchecked Sendable {
             if let auth = auth { req.setValue(auth, forHTTPHeaderField: "Authorization") }
             return req
         }
+        func digest(_ www: String) -> String? {
+            guard let user = authUser, let pass = authPass else { return nil }
+            nonceCount += 1
+            return Self.digestHeader(www: www, method: method, uri: url(path).path,
+                                     user: user, pass: pass, nc: nonceCount)
+        }
 
-        // 1) initial request (no auth). The TV answers 401 with a Digest challenge.
-        var (data, resp) = try await session.data(for: build(auth: nil))
+        // Pre-authenticate with the last challenge when we have one; the TV answers 401 only
+        // when the nonce went stale, and then we retry once with the fresh challenge.
+        // (URLSession's built-in digest handling doesn't work reliably with this TV.)
+        var (data, resp) = try await session.data(for: build(auth: authed ? challenge.flatMap(digest) : nil))
         var http = resp as? HTTPURLResponse
-
-        // 2) compute the Digest response ourselves and retry (URLSession's built-in
-        //    digest handling doesn't work reliably with this TV).
         if authed, http?.statusCode == 401,
            let www = http?.value(forHTTPHeaderField: "Www-Authenticate")
-                    ?? http?.value(forHTTPHeaderField: "WWW-Authenticate"),
-           let user = authUser, let pass = authPass {
-            let header = Self.digestHeader(www: www, method: method,
-                                           uri: url(path).path, user: user, pass: pass)
-            (data, resp) = try await session.data(for: build(auth: header))
+                    ?? http?.value(forHTTPHeaderField: "WWW-Authenticate") {
+            challenge = www
+            nonceCount = 0
+            (data, resp) = try await session.data(for: build(auth: digest(www)))
             http = resp as? HTTPURLResponse
         }
 
         let code = http?.statusCode ?? -1
-        if code < 200 || code >= 300 { AppState.log("HTTP \(code) \(method) \(path)") }
+        if code < 200 || code >= 300 {
+            AppState.log("HTTP \(code) \(method) \(path)")
+            throw PhilipsError.http(code)
+        }
         return data
     }
 
@@ -109,7 +136,8 @@ final class PhilipsClient: NSObject, URLSessionDelegate, @unchecked Sendable {
         Insecure.MD5.hash(data: Data(s.utf8)).map { String(format: "%02x", $0) }.joined()
     }
 
-    static func digestHeader(www: String, method: String, uri: String, user: String, pass: String) -> String {
+    static func digestHeader(www: String, method: String, uri: String, user: String, pass: String,
+                             nc count: Int = 1) -> String {
         var p: [String: String] = [:]
         let scanner = www.replacingOccurrences(of: "Digest ", with: "")
         let re = try! NSRegularExpression(pattern: "(\\w+)=(\"[^\"]*\"|[^,]+)")
@@ -127,7 +155,7 @@ final class PhilipsClient: NSObject, URLSessionDelegate, @unchecked Sendable {
         let ha1 = md5("\(user):\(realm):\(pass)")
         let ha2 = md5("\(method):\(uri)")
         let cnonce = String((0..<16).map { _ in "0123456789abcdef".randomElement()! })
-        let nc = "00000001"
+        let nc = String(format: "%08x", count)
         let response: String
         if let qop = qop, qop.contains("auth") {
             response = md5("\(ha1):\(nonce):\(nc):\(cnonce):auth:\(ha2)")
@@ -298,7 +326,36 @@ final class PhilipsClient: NSObject, URLSessionDelegate, @unchecked Sendable {
 enum PhilipsError: LocalizedError {
     case pairing(String)
     case launch(String)
+    case http(Int)
     var errorDescription: String? {
-        switch self { case .pairing(let m), .launch(let m): return m }
+        switch self {
+        case .pairing(let m), .launch(let m): return m
+        case .http(let code): return "HTTP \(code)"
+        }
+    }
+}
+
+/// Serialises async work: one holder at a time, `minGap` seconds between holders.
+actor RequestGate {
+    private let minGap: TimeInterval
+    private var busy = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+    private var lastEnd = Date.distantPast
+
+    init(minGap: TimeInterval) { self.minGap = minGap }
+
+    func acquire() async {
+        if busy {
+            await withCheckedContinuation { waiters.append($0) }    // ownership handed over
+        } else {
+            busy = true
+        }
+        let wait = minGap - Date().timeIntervalSince(lastEnd)
+        if wait > 0 { try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000)) }
+    }
+
+    func release() {
+        lastEnd = Date()
+        if waiters.isEmpty { busy = false } else { waiters.removeFirst().resume() }
     }
 }
