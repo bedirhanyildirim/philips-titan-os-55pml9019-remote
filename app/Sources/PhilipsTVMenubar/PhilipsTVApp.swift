@@ -100,8 +100,7 @@ struct MainView: View {
             }
             Spacer()
             Button {
-                state.key("Standby")
-                Task { try? await Task.sleep(nanoseconds: 1_500_000_000); await state.refresh() }
+                state.togglePower()
             } label: {
                 Image(systemName: "power")
                     .font(.system(size: 14, weight: .bold))

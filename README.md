@@ -21,6 +21,9 @@ Inspired by [LGwebOS-menubar](https://github.com/gabrielgreco1/LGwebOS-menubar).
 | ✨ **Ambilight** | Follow video / follow audio / fixed colour presets, off |
 | ⚙️ **Settings** | Connection status, re-pairing, refresh, quit |
 
+The power button wakes the TV with **Wake-on-LAN** when it's off the network (deep standby),
+and the Orange box's power button switches the TV on/off with it over HDMI-CEC.
+
 ## How it works — three control channels
 
 Titan OS locks down the classic JointSpace app/source endpoints

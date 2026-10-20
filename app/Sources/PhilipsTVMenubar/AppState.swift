@@ -153,6 +153,27 @@ final class AppState: ObservableObject {
         }
     }
 
+    // MARK: power
+
+    /// Off/unreachable → Wake-on-LAN (deep standby takes the TV off the network);
+    /// on → Standby key. Re-checks state shortly after.
+    func togglePower() {
+        if isOn {
+            key("Standby")
+        } else {
+            statusMessage = "Waking the TV…"
+            WakeOnLAN.wake(WakeOnLAN.tvMACs)
+            WakeOnLAN.wake(WakeOnLAN.tvMACs, broadcast: "192.168.0.255")
+        }
+        Task {
+            for _ in 0..<5 {
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                await refresh()
+                if isOn == true, statusMessage.isEmpty { break }
+            }
+        }
+    }
+
     // MARK: Orange TV box (HDMI 1)
 
     let orange = OrangeClient(host: UserDefaults.standard.string(forKey: "orangeHost") ?? OrangeClient.defaultHost)

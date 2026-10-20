@@ -230,7 +230,10 @@ open dist/PhilipsTVMenubar.app
 - [ ] **DLNA "send to TV"** (photo/music/video) — DMR is ON; the working version of the
       "show my own content instead of ads" idea.
 - [ ] **UI polish** — app icon, animations.
-- [ ] **Wake-on-LAN** to power the TV on from standby (WoWLAN enabled; MAC known).
+- [x] **Wake-on-LAN** — verified 2026-10-20: a magic packet to 0c:ca:fb:7e:64:b2 /
+      38:1b:9e:be:3e:86 (broadcast :9) brings the TV back from deep standby (off the
+      network) to fully on within ~5 s. The app's power button sends it when the TV is
+      off/unreachable (`WakeOnLAN.swift`). Titan MQTT `settings` has `wowlan.get/set`.
 - [ ] **Login item / auto-start** (System Settings → Login Items, or a LaunchAgent).
 - [x] **Orange box (HDMI 1)** — found on the LAN; local HTTP remote API works (Orange tab).
 - [x] **APK reverse-engineering** — Philips Smart TV app (dead end) and Titan OS Mobile
