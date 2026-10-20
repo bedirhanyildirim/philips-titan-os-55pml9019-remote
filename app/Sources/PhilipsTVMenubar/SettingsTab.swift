@@ -12,9 +12,12 @@ struct SettingsTab: View {
                 row("Status", state.isOn ? "On" : "Off / standby")
             }
             Card(title: "Connections", icon: "link") {
-                status("JointSpace (remote, Ambilight)", ok: !state.needsPairing)
-                status("Titan OS (apps)", ok: state.titan != nil)
-                status("DIAL (YouTube, Netflix, Prime)", ok: true)
+                status("JointSpace (Ambilight, pointer)",
+                       state.needsPairing ? .warn("Not paired") : !state.isOn ? .off
+                       : state.jointSpaceDown ? .warn("Not responding — power-cycle the TV") : .ok)
+                status("Titan OS (apps, remote keys)",
+                       state.titan == nil ? .warn("Not paired") : state.isOn ? .ok : .off)
+                status("DIAL (YouTube, Netflix, Prime)", state.isOn ? .ok : .off)
                 HStack(spacing: 6) {
                     PillButton(title: "Re-pair remote") { state.needsPairing = true }
                     if state.titan == nil {
@@ -63,11 +66,22 @@ struct SettingsTab: View {
         }
     }
 
-    private func status(_ title: String, ok: Bool) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: ok ? "checkmark.circle.fill" : "exclamationmark.circle")
-                .font(.system(size: 11)).foregroundStyle(ok ? .green : .orange)
-            Text(title).font(.system(size: 11))
+    enum Health { case ok, off, warn(String) }
+
+    private func status(_ title: String, _ h: Health) -> some View {
+        let (icon, color, note): (String, Color, String?) = {
+            switch h {
+            case .ok: return ("checkmark.circle.fill", .green, nil)
+            case .off: return ("moon.circle", .secondary, "TV off")
+            case .warn(let m): return ("exclamationmark.triangle.fill", .orange, m)
+            }
+        }()
+        return HStack(alignment: .top, spacing: 6) {
+            Image(systemName: icon).font(.system(size: 11)).foregroundStyle(color)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title).font(.system(size: 11))
+                if let note = note { Text(note).font(.system(size: 9)).foregroundStyle(color) }
+            }
             Spacer()
         }
     }
